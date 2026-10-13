@@ -32,6 +32,7 @@ impl Engine {
                     syllables: Vec::new(),
                     reading: None,
                     translation: None,
+                    alt_translation: None,
                     aux_code: None,
                 },
             );
@@ -57,6 +58,7 @@ impl Engine {
                     syllables: Vec::new(),
                     reading: None,
                     translation: None,
+                    alt_translation: None,
                     aux_code: None,
                 },
             );
@@ -93,6 +95,7 @@ impl Engine {
             syllables: Vec::new(),
             reading: None,
             translation: None,
+            alt_translation: None,
             aux_code: None,
         };
         let word = lists.iter().find_map(|words| words.get(text));
@@ -215,6 +218,7 @@ impl Engine {
                         syllables: syllables.clone(),
                         reading: Some(word.clone()),
                         translation: None,
+                        alt_translation: None,
                         aux_code: None,
                     },
                 );

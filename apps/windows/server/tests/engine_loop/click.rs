@@ -32,6 +32,7 @@ fn clicking_a_translation_commits_that_sense() {
     router.handle_click(HitTarget::Translation {
         candidate: slot as usize - 1,
         sense: 0,
+        alt: false,
     });
     assert_eq!(poll(&mut router, SESSION).1.as_deref(), Some("hello"));
 }

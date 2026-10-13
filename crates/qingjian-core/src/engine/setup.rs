@@ -377,6 +377,12 @@ impl Engine {
         self
     }
 
+    /// 接上第二种学习语言的释义表。
+    pub fn with_alt_translator(mut self, translator: Box<dyn Translator>) -> Self {
+        self.alt_translator = translator;
+        self
+    }
+
     /// 运行时换学习语言的释义表。
     /// 接英文候选用的释义表（英→中）。
     pub fn with_english_translator(mut self, translator: Box<dyn Translator>) -> Self {
@@ -386,6 +392,16 @@ impl Engine {
 
     pub fn set_translator(&mut self, translator: Box<dyn Translator>) {
         self.translator = translator;
+    }
+
+    /// 运行时换第二种学习语言的释义表；关掉时换成 [`NoTranslator`]。
+    pub fn set_alt_translator(&mut self, translator: Box<dyn Translator>) {
+        self.alt_translator = translator;
+    }
+
+    /// 第二种学习语言开着（释义表不是 [`NoTranslator`]）。
+    pub fn has_alt_translator(&self) -> bool {
+        self.alt_translator.language() != Language::Chinese
     }
 
     pub fn with_mode_keys(mut self, keys: ModeKeys) -> Self {

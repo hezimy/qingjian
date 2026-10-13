@@ -27,9 +27,19 @@ impl Router {
             HitTarget::Candidate(offset) => self
                 .slot_index(offset + 1)
                 .and_then(|index| self.commit_index(index)),
-            HitTarget::Translation { candidate, sense } => self
+            HitTarget::Translation {
+                candidate,
+                sense,
+                alt,
+            } => self
                 .annotated_candidate_on_page(candidate + 1)
-                .and_then(|candidate| self.engine.commit_translation(&candidate, sense)),
+                .and_then(|candidate| {
+                    if alt {
+                        self.engine.commit_alt_translation(&candidate, sense)
+                    } else {
+                        self.engine.commit_translation(&candidate, sense)
+                    }
+                }),
         };
         let Some(text) = text else {
             tracing::debug!(?target, "点中的格子没有可上屏的");

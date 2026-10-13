@@ -6,7 +6,7 @@ use qingjian_platform::protocol::{Frame, ScreenRect, SessionId};
 use qingjian_platform::scheme_name;
 use qingjian_render::Mode;
 
-pub use self::sink::{CandidateSink, NoopSink, RenderSettings};
+pub use self::sink::{CandidateSink, NoopSink, RenderSettings, TextStyleSettings};
 use super::Router;
 
 impl Router {

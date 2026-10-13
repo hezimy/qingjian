@@ -4,7 +4,7 @@ use qingjian_platform::{
     LayoutMode, PageKeys, PreeditMode, Scheme, SwitchKeys,
 };
 
-use super::RenderSettings;
+use super::{RenderSettings, TextStyleSettings};
 
 /// Router 要用的配置项，与 macOS 壳的 `Host` 字段对齐。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -34,8 +34,17 @@ pub struct RouterConfig {
     /// 候选窗口主题 id（`[general] theme`）；只对青简渲染器生效。
     pub theme: String,
 
-    /// 候选字、译文字号（`[general] candidate_font_size` / `annotation_font_size`）。
-    pub font_sizes: (FontSize, FontSize),
+    /// 拼音行 / 候选字 / 译文的字号、字重与颜色（`[general]` 下同名项）。
+    pub text: TextStyleSettings,
+
+    /// 候选列表高亮底色（`[general] highlight_color`）；空为用主题的高亮色。只对青简渲染器生效。
+    pub highlight_color: String,
+
+    /// 候选窗口底色（`[general] surface_color`）；空为用主题的。状态条底色与它一致。
+    pub surface_color: String,
+
+    /// 生词译词是否用主题的醒目色标出（`[general] fresh_words`）。
+    pub fresh_words: bool,
 
     /// 过渡动画（`[general] animations`）。
     pub animations: bool,
@@ -133,7 +142,10 @@ impl RouterConfig {
             renderer: self.renderer,
             font: self.font.clone(),
             theme: self.theme.clone(),
-            font_sizes: self.font_sizes,
+            text: self.text.clone(),
+            highlight_color: self.highlight_color.clone(),
+            surface_color: self.surface_color.clone(),
+            fresh_words: self.fresh_words,
             animations: self.animations,
             themes_stamp: self.themes_stamp,
         }
@@ -151,10 +163,20 @@ impl From<&Config> for RouterConfig {
             renderer: config.general.renderer,
             font: config.general.font.trim().to_owned(),
             theme: config.general.theme_id().to_owned(),
-            font_sizes: (
-                config.general.candidate_font_size,
-                config.general.annotation_font_size,
-            ),
+            text: TextStyleSettings {
+                input_size: config.general.input_font_size,
+                candidate_size: config.general.candidate_font_size,
+                annotation_size: config.general.annotation_font_size,
+                input_weight: config.general.input_weight,
+                candidate_weight: config.general.candidate_weight,
+                annotation_weight: config.general.annotation_weight,
+                input_color: config.general.input_color.trim().to_owned(),
+                candidate_color: config.general.candidate_color.trim().to_owned(),
+                annotation_color: config.general.annotation_color.trim().to_owned(),
+            },
+            highlight_color: config.general.highlight_color.trim().to_owned(),
+            surface_color: config.general.surface_color.trim().to_owned(),
+            fresh_words: config.general.fresh_words,
             animations: config.general.animations,
             themes_stamp: 0,
             preedit: config.general.preedit,

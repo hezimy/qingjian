@@ -115,12 +115,12 @@ pub(crate) fn view(settings: &Settings, context: &mut ViewContext<Settings>) -> 
         ),
         field(
             "译词上屏（第一个）",
-            "按住修饰键再按候选序号，上屏候选右侧的译词而不是中文。",
+            "按住修饰键再按候选序号，上屏候选右侧的译词而不是中文。开了两种学习语言时，这组键上屏第一种语言的译词。",
             modifier_combo(s.translation, context.callback(Message::Translation)),
         ),
         field(
             "译词上屏（第二个）",
-            "候选有两个译词时，这组键上屏后一个。两组不能相同。Ctrl + Shift 是 Windows 切换输入法的热键，同时装着别的输入法时别选它。",
+            "同一门语言有两个译词时，这组键上屏后一个。开了两种学习语言时，第二种语言的译词用 Ctrl + Alt + 数字上屏（也可以直接点候选旁那条译文）。两组不能相同。Ctrl + Shift 是 Windows 切换输入法的热键，同时装着别的输入法时别选它。",
             modifier_combo(
                 s.translation_second,
                 context.callback(Message::TranslationSecond),

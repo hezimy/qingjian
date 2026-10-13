@@ -3,6 +3,8 @@ use std::rc::Rc;
 
 use windows::Win32::UI::TextServices::{ITfComposition, ITfContext};
 
+use qingjian_platform::protocol::ScreenRect;
+
 use crate::com::service::SharedClient;
 
 /// `TextService`、编辑会话、组句 sink、轮询定时器之间共享的组句状态（STA 单线程，`Rc` 传递）。
@@ -31,6 +33,9 @@ pub(crate) struct Shared {
 
     /// 与 `TextService` 共用的引擎客户端；DLL 侧结束组句时要通知 Server 收候选窗口（它无从知晓）。
     client: SharedClient,
+
+    /// 上一拍采纳的光标矩形。新报的位置跳到窗口右下角时用它留在原地。
+    last_anchor: Cell<Option<ScreenRect>>,
 }
 
 impl Shared {
@@ -44,6 +49,7 @@ impl Shared {
             server_stale: Cell::new(false),
             foreground: Cell::new(false),
             client,
+            last_anchor: Cell::new(None),
         })
     }
 
@@ -73,10 +79,19 @@ impl Shared {
 
     pub(crate) fn set_composing(&self, value: bool) {
         self.composing.set(value);
-        // 组句结束：下一段重新报输入框状态。
+        // 组句结束：下一段重新报输入框状态，也丢掉上一次的光标位置。
         if !value {
             self.context_reported.set(false);
+            self.last_anchor.set(None);
         }
+    }
+
+    pub(super) fn last_anchor(&self) -> Option<ScreenRect> {
+        self.last_anchor.get()
+    }
+
+    pub(super) fn set_last_anchor(&self, rect: Option<ScreenRect>) {
+        self.last_anchor.set(rect);
     }
 
     pub(crate) fn context_reported(&self) -> bool {
@@ -125,6 +140,7 @@ impl Shared {
     pub(crate) fn end_composing(&self) {
         self.composing.set(false);
         self.translating.set(false);
+        self.last_anchor.set(None);
         self.hide_candidates();
     }
 

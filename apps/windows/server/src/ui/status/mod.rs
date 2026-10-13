@@ -3,6 +3,8 @@
 //!
 //! 按下鼠标先 `DragDetect`：挪出拖动阈值就交给系统的移动循环（`WM_NCLBUTTONDOWN` + `HTCAPTION`），
 //! 结束时 `WM_EXITSIZEMOVE` 报新位置；没挪就是点击，按 x 落进哪格。`WM_MOUSEACTIVATE` 回 `MA_NOACTIVATE` 不抢焦点。
+//! 窗口比看到的那条大一圈（四周留给投影）；`WM_NCHITTEST` 只在真的画了东西的内容矩形里回 `HTCLIENT`，
+//! 其余回 `HTTRANSPARENT` 穿到下面的应用，长按拖动的范围就跟看到的一样。
 //! 一格的规格在 [`cell`]，摆放与点击在 [`placement`]。
 
 mod cell;
@@ -20,10 +22,10 @@ use windows::Win32::Graphics::Gdi::{GetDC, HDC, ReleaseDC, SetBkMode, TRANSPAREN
 use windows::Win32::UI::HiDpi::{GetDpiForSystem, GetDpiForWindow};
 use windows::Win32::UI::Input::KeyboardAndMouse::{DragDetect, ReleaseCapture};
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, DestroyWindow, GetCursorPos, HTCAPTION, HTCLIENT, IDC_HAND,
-    LoadCursorW, MA_NOACTIVATE, SendMessageW, WM_EXITSIZEMOVE, WM_LBUTTONDOWN, WM_MOUSEACTIVATE,
-    WM_NCHITTEST, WM_NCLBUTTONDOWN, WM_TIMER, WNDCLASSEXW, WS_EX_LAYERED, WS_EX_NOACTIVATE,
-    WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_POPUP,
+    CreateWindowExW, DefWindowProcW, DestroyWindow, GetCursorPos, HTCAPTION, HTCLIENT,
+    HTTRANSPARENT, IDC_HAND, LoadCursorW, MA_NOACTIVATE, SendMessageW, WM_EXITSIZEMOVE,
+    WM_LBUTTONDOWN, WM_MOUSEACTIVATE, WM_NCHITTEST, WM_NCLBUTTONDOWN, WM_TIMER, WNDCLASSEXW,
+    WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_POPUP,
 };
 use windows::core::{Error, PCWSTR, Result, w};
 
@@ -246,6 +248,9 @@ impl StatusBar {
                 }
                 let margin = bitmap.content_x as i32;
                 self.placement.margin.set(margin);
+                self.placement
+                    .content
+                    .set((bitmap.content_width as i32, bitmap.content_height as i32));
                 *self.placement.cells.borrow_mut() = rendered
                     .cell_edges
                     .iter()
@@ -275,7 +280,7 @@ impl StatusBar {
             .pos
             .get()
             .unwrap_or_else(|| default_anchor(content, margin));
-        let anchor = clamp_anchor(anchor, content, margin);
+        let anchor = clamp_anchor(anchor, content);
         self.placement.pos.set(Some(anchor));
         anchor
     }
@@ -302,6 +307,7 @@ impl StatusBar {
         if content.0 <= 0 || content.1 <= 0 || cells.is_empty() {
             return Err(Error::from(E_INVALIDARG));
         }
+        self.placement.content.set(content);
         let mut right = 0;
         let bounds: Vec<(i32, StatusAction)> = cells
             .iter()
@@ -383,19 +389,18 @@ fn default_anchor(content: (i32, i32), margin: i32) -> (i32, i32) {
 }
 
 /// 把内容左上角夹进所在显示器的工作区，使整块内容可见。
-fn clamp_anchor(anchor: (i32, i32), content: (i32, i32), margin: i32) -> (i32, i32) {
+/// 不给阴影留白：条子要能贴到任务栏上边，贴边时投影被屏幕边缘裁掉不影响看。
+fn clamp_anchor(anchor: (i32, i32), content: (i32, i32)) -> (i32, i32) {
     let work = monitor::work_area_near(POINT {
         x: anchor.0,
         y: anchor.1,
     });
-    let x = anchor.0.clamp(
-        work.left + margin,
-        (work.right - margin - content.0).max(work.left + margin),
-    );
-    let y = anchor.1.clamp(
-        work.top + margin,
-        (work.bottom - margin - content.1).max(work.top + margin),
-    );
+    let x = anchor
+        .0
+        .clamp(work.left, (work.right - content.0).max(work.left));
+    let y = anchor
+        .1
+        .clamp(work.top, (work.bottom - content.1).max(work.top));
     (x, y)
 }
 
@@ -407,7 +412,11 @@ fn placement_of(hwnd: HWND) -> Option<Rc<Placement>> {
 /// 按下：拖动交给系统移动循环，没拖就是点击；点击不激活；拖动结束报位置。
 unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     match msg {
-        WM_NCHITTEST => LRESULT(HTCLIENT as isize),
+        // 只有画出来的那一条收鼠标，投影留白与圆角外的透明像素回 HTTRANSPARENT 穿到下面的应用
+        WM_NCHITTEST => match placement_of(hwnd) {
+            Some(placement) if placement.hits(lparam) => LRESULT(HTCLIENT as isize),
+            _ => LRESULT(HTTRANSPARENT as isize),
+        },
         WM_MOUSEACTIVATE => LRESULT(MA_NOACTIVATE as isize),
         WM_LBUTTONDOWN => {
             let mut point = POINT::default();

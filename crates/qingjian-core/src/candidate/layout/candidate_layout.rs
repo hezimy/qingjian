@@ -157,6 +157,7 @@ mod tests {
             syllables: vec!["zhang".into(), "tao".into()],
             reading: None,
             translation: None,
+            alt_translation: None,
             aux_code: None,
         }
     }

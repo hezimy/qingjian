@@ -14,6 +14,10 @@ use super::pages::{about, aux_code, cloud, dictionaries, general, shortcut};
 use super::recorder::Recorder;
 use super::{Message, Settings};
 
+/// 设置窗口的默认客户区大小（点 / DIP），见 [`Component::view`] 里的 `window_visuals`。
+const WINDOW_WIDTH: f64 = 1050.0;
+const WINDOW_HEIGHT: f64 = 660.0;
+
 impl Component for Settings {
     type Input = ();
     type Message = Message;
@@ -37,7 +41,6 @@ impl Component for Settings {
             update_error: None,
             dictionary_status: String::new(),
             families: qingjian_render::system_fonts::families(),
-            font_query: None,
         }
     }
 
@@ -51,9 +54,7 @@ impl Component for Settings {
             Message::Navigate(None) => {}
 
             // 通用页
-            Message::LearningLanguage(Some(i)) if i < general::LANGUAGES.len() => {
-                self.save("general", "learning_language", general::LANGUAGES[i].1);
-            }
+            Message::LearningPick(code, on) => self.set_learning_language(code, on),
             Message::PageSize(Some(value)) => {
                 let size = (value.round() as i64).clamp(1, 9);
                 self.save("general", "page_size", size);
@@ -126,35 +127,26 @@ impl Component for Settings {
             Message::Renderer(Some(i)) if i < CandidateRenderer::ALL.len() => {
                 self.save("general", "renderer", CandidateRenderer::ALL[i].key());
             }
-            Message::FontQuery(text) => {
-                let text = text.trim().to_owned();
-                let exact = self
-                    .families
-                    .iter()
-                    .find(|family| family.eq_ignore_ascii_case(&text))
-                    .cloned();
-                match exact {
-                    Some(family) => {
-                        self.font_query = None;
-                        self.save("general", "font", family);
-                    }
-                    None if text.is_empty() => {
-                        self.font_query = None;
-                        self.save("general", "font", "");
-                    }
-                    None => self.font_query = Some(text),
-                }
-            }
-            Message::Font(family) => {
-                self.font_query = None;
-                self.save("general", "font", family);
-            }
+            Message::Font(family) => self.save("general", "font", family),
             Message::CandidateFontSize(size) => self.save_font_size("candidate", size),
             Message::AnnotationFontSize(size) => self.save_font_size("annotation", size),
+            Message::InputFontSize(size) => self.save_font_size("input", size),
+            Message::FontWeight(style, weight) => self.save_font_weight(&style, weight),
+            Message::FontColor(style, color) => self.save_font_color(&style, &color),
+            Message::FreshWords(on) => self.save("general", "fresh_words", on),
             Message::Animations(on) => self.save("general", "animations", on),
             Message::ResetFontSizes => {
                 self.save("general", "candidate_font_size", 0);
                 self.save("general", "annotation_font_size", 0);
+                self.save("general", "input_font_size", 0);
+                self.save("general", "candidate_weight", 0);
+                self.save("general", "annotation_weight", 0);
+                self.save("general", "input_weight", 0);
+                self.save("general", "candidate_color", "");
+                self.save("general", "annotation_color", "");
+                self.save("general", "input_color", "");
+                self.save("general", "highlight_color", "");
+                self.save("general", "surface_color", "");
             }
             Message::StatusBar(on) => self.save("status_bar", "enabled", on),
 
@@ -357,6 +349,8 @@ impl Component for Settings {
 
     fn view(&self, _input: &(), context: &mut ViewContext<Self>) -> View {
         context.window_title("青简设置");
+        // 窗口默认大小（点 / DIP）：比 WinUI 的默认小一截，打开就是能一眼看完的尺寸
+        context.window_visuals(WindowVisuals::new().client_size(WINDOW_WIDTH, WINDOW_HEIGHT));
         let item = |tag: &str, label: &str, symbol| {
             KeyedView::new(
                 tag,

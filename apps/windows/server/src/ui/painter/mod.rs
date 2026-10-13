@@ -6,11 +6,11 @@ use std::rc::Rc;
 
 use qingjian_platform::{CandidateRenderer, LayoutMode};
 use qingjian_render::{
-    FontLibrary, Frame, Layout, Mode, Rendered, RenderedStatus, Renderer, StatusCell, TextSizes,
-    Theme, ThemeLibrary, UiFont, system_fonts,
+    Color, FontLibrary, FontWeight, Frame, Layout, Mode, Rendered, RenderedStatus, Renderer,
+    StatusCell, TextSizes, Theme, ThemeLibrary, UiFont, system_fonts,
 };
 
-use crate::dispatch::RenderSettings;
+use crate::dispatch::{RenderSettings, TextStyleSettings};
 
 /// UI 线程上共享的渲染器；`None` = 系统绘制。
 pub(super) type SharedPainter = Rc<RefCell<Option<Painter>>>;
@@ -70,13 +70,12 @@ impl Painter {
                 if let Some(painter) = painter.as_mut() {
                     let themes =
                         ThemeLibrary::load(qingjian_platform::dirs::themes_dir().as_deref());
-                    let (candidate, annotation) = settings.font_sizes;
                     painter.theme = themes
                         .resolve(&settings.theme, false)
-                        .with_text_sizes(TextSizes {
-                            candidate: candidate.get(),
-                            annotation: annotation.get(),
-                        })
+                        .with_text_sizes(text_sizes(&settings.text))
+                        .with_highlight(color(&settings.highlight_color))
+                        .with_surface(color(&settings.surface_color))
+                        .with_fresh_words(settings.fresh_words)
                         .with_animations(settings.animations);
                     painter
                         .renderer
@@ -167,4 +166,34 @@ fn reduce_motion() -> bool {
 /// 点 → 像素的倍数。
 fn scale(dpi: u32) -> f32 {
     dpi.max(96) as f32 / 96.0
+}
+
+/// 设置里的三处字号、字重与颜色，转成渲染器的文字覆盖。
+fn text_sizes(text: &TextStyleSettings) -> TextSizes {
+    TextSizes {
+        candidate: text.candidate_size.get(),
+        annotation: text.annotation_size.get(),
+        preedit: text.input_size.get(),
+        candidate_weight: weight(text.candidate_weight),
+        annotation_weight: weight(text.annotation_weight),
+        preedit_weight: weight(text.input_weight),
+        candidate_color: color(&text.candidate_color),
+        annotation_color: color(&text.annotation_color),
+        preedit_color: color(&text.input_color),
+    }
+}
+
+/// 配置里的字重：0 = 用主题的，其余夹到 100–900。
+fn weight(value: u16) -> Option<FontWeight> {
+    (value > 0).then(|| FontWeight(value.clamp(100, 900)))
+}
+
+/// `#RRGGBB` 或 `RRGGBB`：写得不对就当没填（用主题色）。
+fn color(text: &str) -> Option<Color> {
+    let text = text.trim().trim_start_matches('#');
+    if text.len() != 6 || !text.chars().all(|c| c.is_ascii_hexdigit()) {
+        return None;
+    }
+    let channel = |range: std::ops::Range<usize>| u8::from_str_radix(&text[range], 16).ok();
+    Some(Color::rgb(channel(0..2)?, channel(2..4)?, channel(4..6)?))
 }

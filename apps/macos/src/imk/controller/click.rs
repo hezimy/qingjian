@@ -59,7 +59,10 @@ impl QingjianInputController {
                     self.commit_index(index, client);
                 }
             }
-            HitTarget::Translation { candidate, sense } => {
+            // macOS 壳不装第二种学习语言的释义表，`alt` 不会为真
+            HitTarget::Translation {
+                candidate, sense, ..
+            } => {
                 let index = host::with(|h| h.session.index_in_view(candidate)).flatten();
                 self.commit_translation_at(index, sense, client);
             }

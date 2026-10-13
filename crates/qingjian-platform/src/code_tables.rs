@@ -22,7 +22,8 @@ pub fn list(dir: &Path) -> Vec<(String, PathBuf)> {
         .filter_map(|path| {
             (path.extension()?.to_str()? == EXTENSION).then(|| {
                 let stem = path.file_stem()?.to_str()?.to_owned();
-                Some((stem, path))
+                // macOS 打包会带上 AppleDouble（`._stroke.qj`），不是码表。
+                (!stem.starts_with("._")).then_some((stem, path))
             })?
         })
         .collect();
@@ -72,4 +73,28 @@ pub fn load(
         }
     }
     loaded
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn list_skips_apple_double_qj() {
+        let dir = std::env::temp_dir().join(format!("qingjian-code-tables-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        // `._stroke.qj` 是 macOS 打包带出来的 AppleDouble，不该被当码表列出来。
+        for name in ["stroke.qj", "pinyin.qj", "._stroke.qj", "readme.txt"] {
+            std::fs::write(dir.join(name), b"").unwrap();
+        }
+
+        let listed = list(&dir);
+        let names: Vec<(&str, &str)> = listed
+            .iter()
+            .map(|(stem, path)| (stem.as_str(), path.file_name().unwrap().to_str().unwrap()))
+            .collect();
+        assert_eq!(names, [("pinyin", "pinyin.qj"), ("stroke", "stroke.qj")]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

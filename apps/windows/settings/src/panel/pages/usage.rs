@@ -62,25 +62,37 @@ fn columns(usage: &Usage) -> [String; 4] {
 pub(crate) fn view(settings: &Settings, _context: &mut ViewContext<Settings>) -> View {
     let today = Zoned::now().date();
     let general = &settings.config.general;
-    // 学习语言关着就没有词汇可统计
-    let language = (!general.learning_language_off()).then(|| {
-        general
-            .learning_language
-            .parse::<Language>()
-            .unwrap_or(Language::English)
-    });
+    // 学习语言关着就没有词汇可统计；开着就每种语言各统计一份（第一种 + 第二种）
+    let languages: Vec<Language> = if general.learning_language_off() {
+        Vec::new()
+    } else {
+        let mut languages = vec![
+            general
+                .learning_language
+                .parse::<Language>()
+                .unwrap_or(Language::English),
+        ];
+        if let Some(second) = general.secondary_learning_language() {
+            languages.push(second);
+        }
+        languages
+    };
     let dir = settings.data_dir();
 
     let usage = UsageStats::open(dir.join("usage.tsv")).summary_on(today);
-    let vocabulary = language.map(|language| {
-        let mut book = VocabularyBook::open(dir.join("user-vocab.tsv"));
-        if let Some(path) = repo_resource(&format!("assets/levels/levels-{}.tsv", language.code()))
-            && let Ok(table) = LevelTable::from_path(path)
-        {
-            book = book.with_levels(language, table);
-        }
-        book.summary_on(language, today)
-    });
+    let vocabularies: Vec<(Language, VocabularySummary)> = languages
+        .into_iter()
+        .map(|language| {
+            let mut book = VocabularyBook::open(dir.join("user-vocab.tsv"));
+            if let Some(path) =
+                repo_resource(&format!("assets/levels/levels-{}.tsv", language.code()))
+                && let Ok(table) = LevelTable::from_path(path)
+            {
+                book = book.with_levels(language, table);
+            }
+            (language, book.summary_on(language, today))
+        })
+        .collect();
 
     let header = table_row("", COLUMNS.map(str::to_owned), true);
     let rows = [
@@ -90,6 +102,27 @@ pub(crate) fn view(settings: &Settings, _context: &mut ViewContext<Settings>) ->
         table_row("累计", columns(&usage.total), false),
     ];
 
+    let mut vocabulary_views: Vec<View> = Vec::new();
+    if vocabularies.is_empty() {
+        vocabulary_views.push(
+            TextBlock::new()
+                .text("词汇")
+                .font_weight(FontWeight::SEMI_BOLD)
+                .into(),
+        );
+        vocabulary_views.push(note("学习语言已关，不统计词汇。"));
+    }
+    for (language, vocabulary) in &vocabularies {
+        vocabulary_views.push(
+            TextBlock::new()
+                .text(format!("词汇（{}）", language_name(*language)))
+                .font_weight(FontWeight::SEMI_BOLD)
+                .into(),
+        );
+        vocabulary_views.push(note(&vocabulary_line(vocabulary)));
+        vocabulary_views.push(level_block(vocabulary));
+    }
+
     let body = StackPanel::new().spacing(12.0).children([
         StackPanel::new().spacing(6.0).children(rows),
         TextBlock::new()
@@ -98,19 +131,12 @@ pub(crate) fn view(settings: &Settings, _context: &mut ViewContext<Settings>) ->
             .into(),
         note(&since_line(&usage)),
         note("数的是上屏的文字：选一个词算一个中文词，整句按词切开数；英文候选、回车原样上屏的英文词与英文译词算英文词。只在这台电脑上数，与输入日志无关。"),
-        TextBlock::new()
-            .text(format!(
-                "词汇（{}）",
-                language.map_or("学习语言已关", language_name)
-            ))
-            .font_weight(FontWeight::SEMI_BOLD)
-            .into(),
-        match &vocabulary {
-            Some(vocabulary) => StackPanel::new()
-                .spacing(12.0)
-                .children([note(&vocabulary_line(vocabulary)), level_block(vocabulary)]),
-            None => note("学习语言已关，不统计词汇。"),
-        },
+        StackPanel::new().spacing(12.0).keyed_children(
+            vocabulary_views
+                .into_iter()
+                .enumerate()
+                .map(|(index, view)| KeyedView::new(index.to_string(), view)),
+        ),
     ]);
     page("统计", body)
 }

@@ -4,7 +4,7 @@ mod action;
 
 use std::cell::{Cell, RefCell};
 
-use windows::Win32::Foundation::{HWND, RECT};
+use windows::Win32::Foundation::{HWND, LPARAM, RECT};
 use windows::Win32::UI::WindowsAndMessaging::GetWindowRect;
 
 pub(super) use self::action::StatusAction;
@@ -25,6 +25,9 @@ pub(super) struct Placement {
     /// 上次画出的各格右边界（内容坐标）与动作，从左到右；点击按 x 落进哪格。
     pub(super) cells: RefCell<Vec<(i32, StatusAction)>>,
 
+    /// 上次画出来的内容尺寸（物理像素）；命中测试用它划出真正能点 / 能拖的那一条。
+    pub(super) content: Cell<(i32, i32)>,
+
     /// 前台全屏、暂时收起了（见 [`super::fullscreen`]）。
     pub(super) fullscreen_hidden: Cell<bool>,
 
@@ -39,9 +42,30 @@ impl Placement {
             margin: Cell::new(margin),
             pos: Cell::new(None),
             cells: RefCell::new(Vec::new()),
+            content: Cell::new((0, 0)),
             fullscreen_hidden: Cell::new(false),
             events,
         }
+    }
+
+    /// `WM_NCHITTEST`（`lparam` 是屏幕坐标，两个有符号 16 位）那一点是不是落在画出来的那一条上。
+    /// 状态条窗口比看到的那条大一圈——四周是留给投影的透明留白，圆角外也是空的；这些地方要穿透，
+    /// 不然长按拖动会从留白上就开始拖，看着比实际大一圈，也挡住了下面的应用。
+    pub(super) fn hits(&self, lparam: LPARAM) -> bool {
+        let (width, height) = self.content.get();
+        if width <= 0 || height <= 0 {
+            return false;
+        }
+        let mut rect = RECT::default();
+        if unsafe { GetWindowRect(self.hwnd, &mut rect) }.is_err() {
+            return false;
+        }
+        let margin = self.margin.get();
+        let (x, y) = (
+            (lparam.0 & 0xFFFF) as i16 as i32 - rect.left - margin,
+            ((lparam.0 >> 16) & 0xFFFF) as i16 as i32 - rect.top - margin,
+        );
+        (0..width).contains(&x) && (0..height).contains(&y)
     }
 
     /// 拖动结束：从窗口矩形反推内容左上角，记下并交给 Router 写回配置。

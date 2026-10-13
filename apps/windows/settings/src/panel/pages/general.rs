@@ -9,14 +9,13 @@ use windows_reactor::{
 use crate::panel::controls::{feedback, field, index_of, page, section};
 use crate::panel::{Message, Settings};
 
-/// 学习语言：界面名 + 配置写法。
-pub(crate) const LANGUAGES: [(&str, &str); 6] = [
+/// 学习语言：界面名 + 配置写法。最多同时勾两种；「不显示译文」由下面 `language_boxes` 单独给。
+pub(crate) const LANGUAGES: [(&str, &str); 5] = [
     ("英语", "en"),
     ("日语", "ja"),
     ("西班牙语", "es"),
     ("越南语", "vi"),
     ("德语", "de"),
-    ("不显示译文", "off"),
 ];
 
 /// 输入方案：界面名 + 配置写法，直接照 [`Scheme::ALL`] 建，不另抄一份。
@@ -59,12 +58,9 @@ pub(crate) fn view(settings: &Settings, context: &mut ViewContext<Settings>) -> 
     let rows = [
         field(
             "学习语言",
-            "候选词右侧显示哪种语言的译词，只列出装了释义表的语言；「不显示译文」同时关掉生词标记与释义兜底。",
-            string_combo(
-                &LANGUAGES,
-                &g.learning_language,
-                context.callback(Message::LearningLanguage),
-            ),
+            "候选旁显示译词，可同时勾选两种（最多两种）。第一种用「快捷键」页的「第一个译词」修饰键加数字上屏（缺省 Ctrl+数字），\
+             第二种用 Ctrl+Alt+数字，也可以直接点候选旁那条译文。勾「不显示译文」则关掉译文、生词标记与释义兜底。",
+            language_boxes(settings, context),
         ),
         field(
             "每页候选数",
@@ -214,6 +210,50 @@ pub(crate) fn view(settings: &Settings, context: &mut ViewContext<Settings>) -> 
             feedback(&settings.notice),
         ]),
     )
+}
+
+/// 学习语言：每种一门勾选框 + 「不显示译文」，横排。最多同时勾两种（勾满后其余置灰）。
+fn language_boxes(settings: &Settings, context: &mut ViewContext<Settings>) -> View {
+    let general = &settings.config.general;
+    let off = general.learning_language_off();
+    let mut selected = Vec::new();
+    if !off {
+        selected.push(general.learning_language.trim().to_owned());
+        if let Some(language) = general.secondary_learning_language() {
+            selected.push(language.code().to_owned());
+        }
+    }
+    let full = selected.len() >= 2;
+    let boxes = [
+        CheckBox::new()
+            .is_checked(off)
+            .on_is_checked_changed(context.callback(|on| Message::LearningPick("off", on)))
+            .content("不显示译文"),
+        language_box(LANGUAGES[0], &selected, full, context),
+        language_box(LANGUAGES[1], &selected, full, context),
+        language_box(LANGUAGES[2], &selected, full, context),
+        language_box(LANGUAGES[3], &selected, full, context),
+        language_box(LANGUAGES[4], &selected, full, context),
+    ];
+    StackPanel::new()
+        .orientation(Orientation::Horizontal)
+        .spacing(12.0)
+        .children(boxes)
+}
+
+/// 一门学习语言的勾选框：已在选中列表里就勾上；已经勾满两种且自己不在此列时置灰。
+fn language_box(
+    (label, code): (&'static str, &'static str),
+    selected: &[String],
+    full: bool,
+    context: &mut ViewContext<Settings>,
+) -> View {
+    let on = selected.iter().any(|item| item == code);
+    CheckBox::new()
+        .is_checked(on)
+        .is_enabled(on || !full)
+        .on_is_checked_changed(context.callback(move |on| Message::LearningPick(code, on)))
+        .content(label)
 }
 
 /// 中英切换键：系统 Ctrl + Space 在最上面，其余青简切换键纵排，避免在窄窗口与高缩放下挤出卡片。

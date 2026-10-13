@@ -17,9 +17,11 @@ mod windows;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
-use cosmic_text::FontSystem;
 use cosmic_text::fontdb::{Database, Family, Source};
+use cosmic_text::{Fallback, FontSystem, PlatformFallback};
+use unicode_script::Script;
 
 use crate::error::RenderError;
 
@@ -42,6 +44,9 @@ pub struct FontLibrary {
 
     /// 中日同形字回退用的 locale，如 `zh-CN`。
     locale: String,
+
+    /// 逐字形兜底里要排除的字族，见 [`fallback_only_families`]。
+    forbidden: Vec<&'static str>,
 }
 
 impl FontLibrary {
@@ -99,11 +104,13 @@ impl FontLibrary {
                 tracing::debug!(path = %path.display(), "字体文件不存在，跳过");
             }
         }
-        tracing::debug!(faces = db.len(), ui_family, "字体库就绪");
+        let forbidden = fallback_only_families(&db, &platform::fallback_only_fonts(locale));
+        tracing::debug!(faces = db.len(), ui_family, forbidden = ?forbidden, "字体库就绪");
         Ok(Self {
             db,
             ui_family,
             locale: locale.to_owned(),
+            forbidden,
         })
     }
 
@@ -143,8 +150,119 @@ impl FontLibrary {
     pub(crate) fn into_font_system(self) -> FontSystem {
         let mut db = self.db;
         db.set_sans_serif_family(self.ui_family);
-        FontSystem::new_with_locale_and_db(self.locale, db)
+        FontSystem::new_with_locale_and_db_and_fallback(
+            self.locale,
+            db,
+            LibraryFallback {
+                forbidden: self.forbidden,
+            },
+        )
     }
+}
+
+/// 平台自带的回退表，外加一份「逐字形兜底里禁用」的字族。
+///
+/// cosmic-text 的逐字形回退分三段：脚本表（Han → 微软雅黑之类，要求字重**精确**命中）、通用表（Segoe UI 等），
+/// 最后一段按字重差距把库里任何有字形的字体兜一遍。汉字字体只有 300 / 400 / 700 三档，字重写 500 这类中间值时
+/// 脚本表过不去，兜底就会挑中恰好有该字重的日文字体（Windows 上 Yu Gothic 有 Medium），把「直 / 骨 / 曜」
+/// 这些汉日同形字画成日文写法、笔画也跟着变毛。
+///
+/// 这里把「只为回退加载的外文字体」列进禁用表——`forbidden_fallback` 只作用于最后那段兜底，脚本表照旧，
+/// 所以假名仍然拿得到 Yu Gothic，汉字则只能落到汉字字体上。
+struct LibraryFallback {
+    /// 禁用的字族名，见 [`fallback_only_families`]。
+    forbidden: Vec<&'static str>,
+}
+
+impl Fallback for LibraryFallback {
+    fn common_fallback(&self) -> &[&'static str] {
+        PlatformFallback.common_fallback()
+    }
+
+    fn forbidden_fallback(&self) -> &[&'static str] {
+        &self.forbidden
+    }
+
+    fn script_fallback(&self, script: Script, locale: &str) -> &[&'static str] {
+        PlatformFallback.script_fallback(script, locale)
+    }
+}
+
+/// 这些字体文件里的字族名，进 [`LibraryFallback`] 的禁用表；文件没加载进 `db` 就没有名字。
+///
+/// 回退表存的是 `&'static str`，所以名字要 leak；字族名只有几个、一次进程内复用同一份，不重复 leak。
+fn fallback_only_families(db: &Database, paths: &[PathBuf]) -> Vec<&'static str> {
+    static INTERNED: Mutex<Vec<&'static str>> = Mutex::new(Vec::new());
+    let mut interned = INTERNED.lock().unwrap_or_else(|error| error.into_inner());
+    let mut names: Vec<&'static str> = Vec::new();
+    for face in db.faces() {
+        let (Source::File(path) | Source::SharedFile(path, _)) = &face.source else {
+            continue;
+        };
+        if !paths.iter().any(|want| want == path) {
+            continue;
+        }
+        for (name, _) in &face.families {
+            let known = interned
+                .iter()
+                .find(|have| have.eq_ignore_ascii_case(name))
+                .copied()
+                .unwrap_or_else(|| {
+                    let leaked: &'static str = Box::leak(name.clone().into_boxed_str());
+                    interned.push(leaked);
+                    leaked
+                });
+            if !names.contains(&known) {
+                names.push(known);
+            }
+        }
+    }
+    names
+}
+
+/// 候选窗里的文字能真正渲染出来的字重档位（升序），设置页的字重下拉按它列项。
+///
+/// `font_files` 是用户指定的候选窗字体的文件，空为系统字体。
+///
+/// 系统字体下按**汉字字体**（Windows 是微软雅黑：Light 290 / Regular 400 / Bold 700）列：候选字与译文主要是汉字，
+/// 汉字字体没有的档位虽然也画得出来，但汉字会被逐字形回退换成别的字体（见 [`LibraryFallback`]），看着就不对了。
+/// 界面字体没有对应档位时（如 290）会取它最近的档位，字形仍然正常。
+pub fn candidate_weights(locale: &str, font_files: &[PathBuf]) -> Vec<u16> {
+    if !font_files.is_empty() {
+        return files_weights(font_files);
+    }
+    let han = files_weights(&platform::han_fonts(locale));
+    if !han.is_empty() {
+        return han;
+    }
+    // 没有汉字字体（漏装 / 路径变了）时退回界面字体的档位，别给个空下拉
+    let mut ui: Vec<PathBuf> = platform::ui_fonts()
+        .into_iter()
+        .find(|path| !file_weights(path).is_empty())
+        .into_iter()
+        .collect();
+    ui.extend(platform::ui_weight_fonts());
+    files_weights(&ui)
+}
+
+/// 一组字体文件里声明过的字重并集（升序）。
+fn files_weights(paths: &[PathBuf]) -> Vec<u16> {
+    let mut weights: Vec<u16> = paths.iter().flat_map(|path| file_weights(path)).collect();
+    weights.sort_unstable();
+    weights.dedup();
+    weights
+}
+
+/// 一个字体文件里各面声明过的字重（升序）；文件不存在或解析不了返回空。
+fn file_weights(path: &Path) -> Vec<u16> {
+    let mut db = Database::new();
+    if db.load_font_file(path).is_err() {
+        return Vec::new();
+    }
+    let mut weights: Vec<u16> = db.faces().map(|face| face.weight.0).collect();
+    weights.sort_unstable();
+    weights.dedup();
+    weights
 }
 
 /// 界面字体用的字族。
@@ -292,5 +410,30 @@ mod tests {
         all_broken.extend_from_slice(&broken);
         all_broken.extend_from_slice(&broken);
         assert!(!rasterizable(&all_broken));
+    }
+
+    /// 设置里的字重档位：升序去重，系统字体下按汉字字体的档位列（Windows 上是微软雅黑的三档，
+    /// 不是界面字体与它的交集——290 这种档位界面字体没有，但汉字画得好好的）。
+    #[test]
+    fn candidate_weights_are_sorted_and_follow_the_han_font() {
+        let weights = candidate_weights("zh-CN", &[]);
+        assert!(
+            weights.windows(2).all(|pair| pair[0] < pair[1]),
+            "{weights:?}"
+        );
+        let han = files_weights(&platform::han_fonts("zh-CN"));
+        if !han.is_empty() {
+            assert_eq!(weights, han);
+        }
+    }
+
+    /// 指定了候选窗字体就按它自己的档位列。
+    #[test]
+    fn candidate_weights_of_a_custom_font_come_from_its_files() {
+        let Some(path) = platform::ui_fonts().into_iter().find(|path| path.is_file()) else {
+            return;
+        };
+        let files = std::slice::from_ref(&path);
+        assert_eq!(candidate_weights("zh-CN", files), file_weights(&path));
     }
 }

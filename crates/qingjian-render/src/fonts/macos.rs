@@ -38,6 +38,12 @@ pub(super) fn script_fonts(locale: &str) -> Vec<PathBuf> {
     fonts
 }
 
+/// 只为回退加载、不该在逐字形兜底里抢汉字的字体，见 `fonts::fallback_only_families`。
+/// 苹方是可变字体（字重档位齐全），写中间字重时脚本表仍然命中，不需要禁谁。
+pub(super) fn fallback_only_fonts(_locale: &str) -> Vec<PathBuf> {
+    Vec::new()
+}
+
 pub(super) fn emoji_fonts() -> Vec<PathBuf> {
     vec![PathBuf::from(format!(
         "{SYSTEM_FONTS}/Apple Color Emoji.ttc"

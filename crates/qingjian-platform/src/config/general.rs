@@ -1,4 +1,4 @@
-use qingjian_core::ShuangpinScheme;
+use qingjian_core::{Language, ShuangpinScheme};
 use serde::{Deserialize, Serialize};
 
 use super::scheme::{Scheme, scheme_label};
@@ -27,8 +27,11 @@ pub const LEARNING_LANGUAGE_OFF: &str = "off";
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct GeneralConfig {
-    /// 学习语言（ISO 639-1，`en` / `ja` / `es` / `vi` / `de`；`off` 不显示译文）：候选旁显示哪种语言的译文。要有对应的释义表文件才生效。
+    /// 第一种学习语言（ISO 639-1，`en` / `ja` / `es` / `vi` / `de`；`off` 不显示译文）：候选旁显示哪种语言的译文。要有对应的释义表文件才生效。
     pub learning_language: String,
+
+    /// 第二种学习语言。空或 `off` 表示只显示第一种；与第一种相同则忽略。
+    pub learning_language_2: String,
 
     /// 每页候选数，1–9。
     pub page_size: usize,
@@ -61,6 +64,37 @@ pub struct GeneralConfig {
 
     /// 译文字号（点），同上。
     pub annotation_font_size: FontSize,
+
+    /// 拼音行（录入框）字号（点），同上。不跟候选字缩放。
+    pub input_font_size: FontSize,
+
+    /// 候选字字重（100–900）；0 用主题的。只对青简渲染器生效。
+    pub candidate_weight: u16,
+
+    /// 译文字重（100–900）；0 用主题的。
+    pub annotation_weight: u16,
+
+    /// 拼音行字重（100–900）；0 用主题的。
+    pub input_weight: u16,
+
+    /// 候选字颜色（`#RRGGBB` 或 `RRGGBB`）；空用主题的。只改常态，高亮候选仍用主题的高亮配色。
+    pub candidate_color: String,
+
+    /// 译文颜色，同上。
+    pub annotation_color: String,
+
+    /// 拼音行颜色，同上。
+    pub input_color: String,
+
+    /// 候选列表高亮（当前选中那一行）的底色（`#RRGGBB` 或 `RRGGBB`）；空用主题的高亮色。
+    /// 高亮行上的文字配色（`hl_*`）仍由主题定，这一项只改底。只对青简渲染器生效。
+    pub highlight_color: String,
+
+    /// 候选窗口的底色（`#RRGGBB` 或 `RRGGBB`）；空用主题的 `surface`。悬浮状态条的底与它一致。
+    pub surface_color: String,
+
+    /// 生词译词用主题的醒目色（青简绿 / 护眼绿是橙 `@fresh`）标出来。关掉后所有译文都用常态译文色。
+    pub fresh_words: bool,
 
     /// 候选窗口的过渡与循环动画。关掉与系统「减弱动态效果」一样：高亮直接跳过去，循环动画停在第一帧。
     pub animations: bool,
@@ -155,6 +189,7 @@ impl Default for GeneralConfig {
     fn default() -> Self {
         Self {
             learning_language: "en".to_owned(),
+            learning_language_2: String::new(),
             page_size: MAX_PAGE_SIZE,
             page_keys: PAGE_KEY_OPTIONS[0].to_owned(),
             appearance: Some(Appearance::default()),
@@ -165,6 +200,16 @@ impl Default for GeneralConfig {
             font: String::new(),
             candidate_font_size: FontSize::default(),
             annotation_font_size: FontSize::default(),
+            input_font_size: FontSize::default(),
+            candidate_weight: 0,
+            annotation_weight: 0,
+            input_weight: 0,
+            candidate_color: String::new(),
+            annotation_color: String::new(),
+            input_color: String::new(),
+            highlight_color: String::new(),
+            surface_color: String::new(),
+            fresh_words: true,
             animations: true,
             preedit: PreeditMode::default(),
             english_candidates: true,
@@ -257,6 +302,23 @@ impl GeneralConfig {
         self.learning_language
             .trim()
             .eq_ignore_ascii_case(LEARNING_LANGUAGE_OFF)
+    }
+
+    /// 第二种学习语言。第一种关着、空、`off`、写得不认识、或与第一种相同，都是 `None`。
+    pub fn secondary_learning_language(&self) -> Option<Language> {
+        if self.learning_language_off() {
+            return None;
+        }
+        let code = self.learning_language_2.trim();
+        if code.is_empty() || code.eq_ignore_ascii_case(LEARNING_LANGUAGE_OFF) {
+            return None;
+        }
+        let language = code.parse::<Language>().ok()?;
+        let primary = self.learning_language.trim().parse::<Language>().ok();
+        if language == Language::Chinese || primary == Some(language) {
+            return None;
+        }
+        Some(language)
     }
 
     /// 当前方案是双拼时是哪一套；不是双拼时为 `None`。

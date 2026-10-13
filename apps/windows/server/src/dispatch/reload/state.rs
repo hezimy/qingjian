@@ -78,8 +78,11 @@ pub(crate) struct ConfigReload {
     /// 已应用的 `[aux_code]`。
     pub(super) applied_aux_code: AuxCodeConfig,
 
-    /// 已应用的学习语言（`None` 为关）。
+    /// 已应用的第一种学习语言（`None` 为关）。
     pub(super) applied_language: Option<Language>,
+
+    /// 已应用的第二种学习语言（`None` 为关）。
+    pub(super) applied_alt_language: Option<Language>,
 
     /// 最近加载的用户词库文件快照（路径、修改时间、长度）。
     pub(super) dictionary_files: Vec<(PathBuf, Option<SystemTime>, u64)>,

@@ -46,6 +46,7 @@ fn candidates_and_their_translations_are_clickable() {
                 HitTarget::Translation {
                     candidate: 0,
                     sense: 0,
+                    alt: false,
                 },
             );
             let (x, y) = center(first, rendered.scale);
@@ -55,6 +56,7 @@ fn candidates_and_their_translations_are_clickable() {
                     == HitTarget::Translation {
                         candidate: 0,
                         sense: 1,
+                        alt: false,
                     }
             });
             if let Some(&second) = second {

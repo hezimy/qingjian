@@ -83,8 +83,11 @@ pub struct Engine {
     /// 静态词库。
     dictionary: Dictionary,
 
-    /// 译文提供方，缺省为 [`NoTranslator`]。
+    /// 第一种学习语言的译文，缺省为 [`NoTranslator`]。
     translator: Box<dyn Translator>,
+
+    /// 第二种学习语言的译文，缺省为 [`NoTranslator`]（不显示）。
+    alt_translator: Box<dyn Translator>,
 
     /// 前缀模式键（表达式 / 问字）。
     modes: ModeKeys,
@@ -94,7 +97,7 @@ pub struct Engine {
     extra_dictionaries: Vec<Dictionary>,
 
     /// 英文候选的释义（英→中），缺省为 [`NoTranslator`]。英文候选的辅助语言是主语言中文，
-    /// 与中文候选查学习语言的表分开，仍是「一个候选只显示一种辅助语言」。
+    /// 与中文候选查学习语言的表分开。
     english_translator: Box<dyn Translator>,
 
     /// 用户词频，缺省为 [`NoLearner`]；私密输入期间只读不写（[`learning::MutedLearner`]）。
@@ -393,6 +396,7 @@ impl Engine {
             dictionary,
             extra_dictionaries: Vec::new(),
             translator: Box::new(NoTranslator),
+            alt_translator: Box::new(NoTranslator),
             english_translator: Box::new(NoTranslator),
             modes: ModeKeys::default(),
             learner: learning::MutedLearner::new(Box::new(NoLearner)),

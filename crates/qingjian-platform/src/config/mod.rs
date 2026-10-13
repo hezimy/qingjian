@@ -209,8 +209,10 @@ pub const TEMPLATE: &str = concat!(
     r#"# 青简输入法配置。保存后自动生效；也可以在菜单栏的输入法菜单里改。
 
 [general]
-# 学习语言（en 英语 / ja 日语 / es 西班牙语 / de 德语 / off 不显示译文）：候选旁显示哪种语言的译文，要有对应的释义表才生效
+# 第一种学习语言（en 英语 / ja 日语 / es 西班牙语 / vi 越南语 / de 德语 / off 不显示译文）：候选旁显示哪种语言的译文，要有对应的释义表才生效
 learning_language = "en"
+# 第二种学习语言：再选一门一起显示；留空或 off 表示只显示第一种，与第一种相同则忽略
+learning_language_2 = ""
 # 每页候选数（1–9）
 page_size = 9
 # 翻页键对：前一个上一页、后一个下一页。可选 "[]"、",." 或 "-="
@@ -218,7 +220,7 @@ page_size = 9
 page_keys = "[]"
 # 候选窗口外观：system 跟随系统 / light 浅色 / dark 深色
 appearance = "system"
-# 候选窗口主题（主题 id）：qingjian 青简绿 / system-blue 系统蓝 / wechat 微信绿 / sakura 樱花。只对青简渲染器生效
+# 候选窗口主题（主题 id）：qingjian 青简绿 / eyecare 护眼绿 / system-blue 系统蓝 / wechat 微信绿 / sakura 樱花。只对青简渲染器生效
 theme = "qingjian"
 # 候选窗口排布：vertical 竖排 / horizontal 横排（横排只给高亮候选显示译文）
 layout = "vertical"
@@ -229,9 +231,24 @@ horizontal_grid = false
 renderer = "qingjian"
 # 候选窗口字体（字族名，如 "LXGW WenKai"）；空为系统字体。只对青简渲染器生效，没装这个字体时自动回到系统字体
 font = ""
-# 候选字、译文的字号（点），盖过主题；0 用主题的。只对青简渲染器生效
+# 候选字、译文、拼音行的字号（点），盖过主题；0 用主题的。只对青简渲染器生效
 candidate_font_size = 0
 annotation_font_size = 0
+input_font_size = 0
+# 候选字、译文、拼音行的字重（100–900）；0 用主题的
+candidate_weight = 0
+annotation_weight = 0
+input_weight = 0
+# 候选字、译文、拼音行的颜色（#RRGGBB 或 RRGGBB）；空用主题的。只改常态，高亮候选仍用主题的高亮配色
+candidate_color = ""
+annotation_color = ""
+input_color = ""
+# 候选列表里当前选中那一行的底色、候选窗口的底色（#RRGGBB 或 RRGGBB）；空用主题的，状态条底色跟窗口底一致。
+# 高亮行上文字的配色仍由主题定，这两项只改底；青简绿的高亮是 #b0ce7d7f、窗口底 #ffffff，护眼绿是 #E3ECE4 / #F6F8F5
+highlight_color = ""
+surface_color = ""
+# 生词译词（看过的轮次还不到 3 轮）用主题的醒目色标出来；false 时所有译文都用常态译文色
+fresh_words = true
 # 候选窗口的过渡动画（高亮滑动、主题里的循环动画）；false 时直接跳到位，与系统「减弱动态效果」一样
 animations = true
 # 组句中的拼音显示在哪：both 行内和候选窗口 / inline 只在行内 / window 只在候选窗口（应用里不放 marked text）
@@ -581,7 +598,7 @@ impl Config {
 const APPEARANCE_COMMENT: &str = "# 候选窗口外观：system 跟随系统 / light 浅色 / dark 深色\n";
 
 /// 模板里 `theme` 那一行上方的注释，同上。
-const THEME_COMMENT: &str = "# 候选窗口主题（主题 id）：qingjian 青简绿 / system-blue 系统蓝 / wechat 微信绿 / sakura 樱花。只对青简渲染器生效\n";
+const THEME_COMMENT: &str = "# 候选窗口主题（主题 id）：qingjian 青简绿 / eyecare 护眼绿 / system-blue 系统蓝 / wechat 微信绿 / sakura 樱花。只对青简渲染器生效\n";
 
 /// 旧写法里 `theme` 写的外观；新写法（或没写）为 `None`。
 fn legacy_appearance(document: &DocumentMut) -> Option<Appearance> {

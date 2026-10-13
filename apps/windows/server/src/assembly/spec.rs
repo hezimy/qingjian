@@ -13,6 +13,9 @@ pub struct AssemblySpec {
     /// 学习语言的释义表。
     pub glossary: Option<(Language, PathBuf)>,
 
+    /// 第二种学习语言的释义表；没开第二种时为 `None`。
+    pub alt_glossary: Option<(Language, PathBuf)>,
+
     /// 英→中释义表（英文候选的中文释义）。
     pub english_glossary: Option<PathBuf>,
 
@@ -52,6 +55,7 @@ impl AssemblySpec {
         Self {
             dict: dict.into(),
             glossary: None,
+            alt_glossary: None,
             english_glossary: None,
             english: None,
             emoji: Vec::new(),

@@ -7,11 +7,11 @@
 use std::mem::ManuallyDrop;
 use std::sync::atomic::{AtomicI32, Ordering};
 
-use windows::Win32::Foundation::{POINT, RECT};
+use windows::Win32::Foundation::{HWND, POINT, RECT};
 use windows::Win32::UI::TextServices::{
     ITfContext, ITfRange, TF_ANCHOR_START, TF_DEFAULT_SELECTION, TF_SELECTION,
 };
-use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
+use windows::Win32::UI::WindowsAndMessaging::{GetCursorPos, GetForegroundWindow, GetWindowRect};
 use windows::core::BOOL;
 
 use qingjian_platform::protocol::ScreenRect;
@@ -130,6 +130,65 @@ fn to_screen(rect: RECT) -> ScreenRect {
     }
 }
 
+/// 前台窗口的屏幕矩形。用来认出「光标被报成窗口右下角」这种没排好版的结果。
+pub(crate) fn foreground_bounds() -> Option<ScreenRect> {
+    let hwnd = unsafe { GetForegroundWindow() };
+    if hwnd == HWND::default() {
+        return None;
+    }
+    let mut rect = RECT::default();
+    unsafe { GetWindowRect(hwnd, &mut rect) }.ok()?;
+    Some(to_screen(rect))
+}
+
+/// 组句范围和选区经常一个准、一个落到窗口右下角。离上一次太远时取更近的那个；
+/// 两个都贴在大窗口右下角、上一次还在输入框附近，就留在上一次。
+pub(crate) fn stabilize(
+    previous: Option<ScreenRect>,
+    primary: ScreenRect,
+    secondary: Option<ScreenRect>,
+    window: Option<ScreenRect>,
+) -> ScreenRect {
+    let mut chosen = primary;
+    if let (Some(previous), Some(secondary)) = (previous, secondary) {
+        let primary_jump = jump(previous, primary);
+        let secondary_jump = jump(previous, secondary);
+        if primary_jump > 160 && secondary_jump + 80 < primary_jump {
+            chosen = secondary;
+        }
+    }
+    if let Some(previous) = previous
+        && jump(previous, chosen) > 160
+        && cornerish(chosen, window)
+        && !cornerish(previous, window)
+    {
+        return previous;
+    }
+    chosen
+}
+
+fn jump(from: ScreenRect, to: ScreenRect) -> i32 {
+    (from.left - to.left).abs() + (from.top - to.top).abs()
+}
+
+/// 大窗口右下角一小块。部分上屏后 Chromium 系浏览器用这个位置顶替还没排好的光标。
+fn cornerish(rect: ScreenRect, window: Option<ScreenRect>) -> bool {
+    let Some(window) = window else {
+        return false;
+    };
+    let width = window.right - window.left;
+    let height = window.bottom - window.top;
+    if width < 500 || height < 400 {
+        return false;
+    }
+    let dx = window.right - rect.left;
+    let dy = window.bottom - rect.top;
+    (0..220).contains(&dx)
+        && (0..220).contains(&dy)
+        && rect.right - rect.left < 500
+        && rect.bottom - rect.top < 120
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::{Mutex, MutexGuard};
@@ -147,6 +206,15 @@ mod tests {
             left: 100,
             top,
             right: 103,
+            bottom,
+        }
+    }
+
+    fn screen(left: i32, top: i32, right: i32, bottom: i32) -> ScreenRect {
+        ScreenRect {
+            left,
+            top,
+            right,
             bottom,
         }
     }
@@ -179,5 +247,34 @@ mod tests {
         assert!(!repair_degenerate(&mut whole));
         assert_eq!(whole.bottom, 900);
         assert_eq!(LAST_LINE_HEIGHT.load(Ordering::Relaxed), 0);
+    }
+
+    #[test]
+    fn keeps_the_caret_when_the_composition_rect_jumps_to_the_corner() {
+        let window = screen(0, 0, 1600, 900);
+        let previous = screen(40, 80, 40, 100);
+        let corner = screen(1500, 860, 1500, 880);
+        let caret = screen(56, 80, 56, 100);
+        assert_eq!(
+            stabilize(Some(previous), corner, Some(caret), Some(window)),
+            caret
+        );
+        assert_eq!(
+            stabilize(Some(previous), corner, Some(corner), Some(window)),
+            previous
+        );
+    }
+
+    #[test]
+    fn follows_a_real_move() {
+        let window = screen(0, 0, 1600, 900);
+        let previous = screen(40, 80, 40, 100);
+        let moved = screen(40, 120, 40, 140);
+        assert_eq!(
+            stabilize(Some(previous), moved, Some(moved), Some(window)),
+            moved
+        );
+        let corner = screen(1500, 860, 1502, 880);
+        assert_eq!(stabilize(None, corner, None, Some(window)), corner);
     }
 }

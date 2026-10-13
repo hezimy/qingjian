@@ -33,6 +33,12 @@ pub(super) fn script_fonts(_locale: &str) -> Vec<PathBuf> {
     .collect()
 }
 
+/// 只为回退加载、不该在逐字形兜底里抢汉字的字体，见 `fonts::fallback_only_families`。
+/// Noto Sans CJK 是可变字体（字重档位齐全），写中间字重时脚本表仍然命中，不需要禁谁。
+pub(super) fn fallback_only_fonts(_locale: &str) -> Vec<PathBuf> {
+    Vec::new()
+}
+
 pub(super) fn emoji_fonts() -> Vec<PathBuf> {
     [
         "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf",

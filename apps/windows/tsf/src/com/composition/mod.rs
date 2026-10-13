@@ -18,7 +18,9 @@ use qingjian_platform::protocol::{Frame, PreeditKind};
 
 pub(crate) use self::shared::Shared;
 use self::sink::CompositionSink;
-use super::edit::{InputContext, anchor_rect, caret_rect, input_context};
+use super::edit::{
+    InputContext, anchor_rect, caret_rect, foreground_bounds, input_context, stabilize,
+};
 use super::service::SharedClient;
 
 /// 内联要显示的拼音行（跳过被纠错划掉的原字母）；空串表示没有组句内容。
@@ -90,18 +92,31 @@ fn report_surrounding(engine: &SharedClient, before: String) {
 }
 
 /// 组句进行中才报位置；组句已收 Server 会按空帧 / `Commit` 自行收窗口。
+///
+/// 部分上屏后同一会话里新起的组句，Chromium 系宿主常把 `GetTextExt` 报成窗口右下角，
+/// 选区却还在输入框。两个都错时留在上一次的位置，避免候选窗跳走。
 fn report_caret(shared: &Shared, engine: &SharedClient, context: &ITfContext, ec: u32) {
-    let rect = match shared.composition() {
+    let (primary, secondary) = match shared.composition() {
         Some(composition) => {
             let Ok(range) = (unsafe { composition.GetRange() }) else {
                 return;
             };
-            anchor_rect(context, ec, &range)
+            (
+                anchor_rect(context, ec, &range),
+                Some(caret_rect(context, ec)),
+            )
         }
         // 「只在候选窗口」模式应用里不放行内拼音：没有组句范围可量，量插入点。
-        None if shared.composing() => caret_rect(context, ec),
+        None if shared.composing() => (caret_rect(context, ec), None),
         None => return,
     };
+    let rect = stabilize(
+        shared.last_anchor(),
+        primary,
+        secondary,
+        foreground_bounds(),
+    );
+    shared.set_last_anchor(Some(rect));
     // 引擎正被别处借着（罕见）就跳过这拍，Server 保持上次位置。
     if let Ok(mut guard) = engine.try_borrow_mut()
         && let Some(client) = guard.as_mut()

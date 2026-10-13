@@ -27,7 +27,7 @@ use qingjian_platform::protocol::{
 };
 use qingjian_render::Mode;
 
-pub use self::candidates::{CandidateSink, NoopSink, RenderSettings};
+pub use self::candidates::{CandidateSink, NoopSink, RenderSettings, TextStyleSettings};
 pub use self::code::find_code_table;
 use self::composed::Composed;
 pub use self::config::RouterConfig;

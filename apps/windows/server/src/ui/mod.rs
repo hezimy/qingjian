@@ -214,7 +214,13 @@ fn apply(
                 status.hide();
             }
         }
-        UiCommand::Configure(settings) => Painter::configure(painter, &settings),
+        UiCommand::Configure(settings) => {
+            // 系统绘制那套（GDI）不走渲染器，字体 / 字号 / 字重 / 颜色 / 生词开关直接下发到它的主题里
+            self::candidates::theme::set_look(self::candidates::theme::Look::from_settings(
+                &settings,
+            ));
+            Painter::configure(painter, &settings);
+        }
     }
 }
 

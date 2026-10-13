@@ -185,6 +185,9 @@ impl TextService_Impl {
     }
 
     /// 本线程得到 / 失去键盘焦点。得到：补连接，跟上全局模式（别的应用里可能刚切过）。
+    /// 失去：把敲了一半的拼音落定并把候选窗收起——切到别的窗口走的就是这条通知
+    /// （`ITfKeyEventSink::OnSetFocus` 在切窗口时不触发），不然候选窗会一直置顶盖着别的界面，
+    /// 点它也因为宿主文档已经失活而上不了屏。
     pub(super) fn set_thread_focus(&self, foreground: bool) {
         if self.shared.foreground() == foreground {
             return;
@@ -193,6 +196,8 @@ impl TextService_Impl {
         if foreground {
             self.ensure_connected();
             self.sync_mode_from_server();
+        } else {
+            self.commit_pending();
         }
     }
 

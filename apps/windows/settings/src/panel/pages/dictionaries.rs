@@ -104,7 +104,7 @@ pub(crate) fn view(settings: &Settings, context: &mut ViewContext<Settings>) -> 
                 Button::new()
                     .on_click(context.message(Message::ImportDictionary))
                     .content("导入词库…"),
-                note("接受青简 TSV、Rime .dict.yaml 与现成的 .qj；导入即转换进上面的目录，同名覆盖。"),
+                note("接受青简 TSV、Rime .dict.yaml、搜狗词库备份 .bin、细胞词库 .scel 与现成的 .qj；导入即转换进上面的目录，同名覆盖。"),
             )),
         note(&settings.dictionary_status),
     ]);
@@ -136,7 +136,7 @@ pub(crate) fn remove_user_dict(settings: &mut Settings, stem: &str) {
 /// 多选词库，逐个转换并汇总结果；成功项的开关一次写回。
 pub(crate) fn import(settings: &mut Settings) {
     let Some(sources) = rfd::FileDialog::new()
-        .add_filter("词库文件", &["tsv", "yaml", "yml", "qj"])
+        .add_filter("词库文件", &["tsv", "yaml", "yml", "qj", "bin", "scel"])
         .add_filter("所有文件", &["*"])
         .set_title("导入词库")
         .pick_files()

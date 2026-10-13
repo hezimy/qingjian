@@ -48,7 +48,15 @@ impl Engine {
                     translation
                 }),
             };
-            hits += usize::from(candidate.translation.is_some());
+            candidate.alt_translation = match candidate.kind {
+                CandidateKind::Custom(_) | CandidateKind::English => None,
+                _ => self.alt_translator.translate(text).map(|mut translation| {
+                    self.mark_fresh(&mut translation);
+                    translation
+                }),
+            };
+            hits +=
+                usize::from(candidate.translation.is_some() || candidate.alt_translation.is_some());
         }
         AnnotationReport {
             total: list.items.len(),
@@ -67,23 +75,40 @@ impl Engine {
             .as_ref()
             .and_then(|t| t.senses().get(sense))
             .map(|s| s.text.clone())?;
-        self.commit_with(candidate, InputSource::Translation, Some(sense));
+        self.commit_with(candidate, InputSource::Translation, Some(sense), false);
+        Some(text)
+    }
+
+    /// 上屏第二种学习语言的第 `sense` 条译词（0 是第一条）。学习与拼音消耗和选了这个候选一样。
+    pub fn commit_alt_translation(
+        &mut self,
+        candidate: &Candidate,
+        sense: usize,
+    ) -> Option<String> {
+        let text = candidate
+            .alt_translation
+            .as_ref()
+            .and_then(|t| t.senses().get(sense))
+            .map(|s| s.text.clone())?;
+        self.commit_with(candidate, InputSource::Translation, Some(sense), true);
         Some(text)
     }
 
     /// 候选比输入短时（`kaifazhe` 选了 开发），剩余拼音留在缓冲区，壳应接着 [`Self::query`]。
     /// 候选的最后一个音节比输入长时（`kaif` 选了 开发），把输入吃完。
     pub fn commit(&mut self, candidate: &Candidate) -> String {
-        self.commit_with(candidate, InputSource::from(candidate.kind), None)
+        self.commit_with(candidate, InputSource::from(candidate.kind), None, false)
     }
 
     /// [`Self::commit`] 的内部形式：`source` 写进输入日志（上屏译词时不是候选本身），
     /// `used_sense` 是直接打出去的那条译词的序号（词汇记录里算「用过」）。
+    /// `alt_gloss` 为真时上屏的是第二种学习语言。
     pub(super) fn commit_with(
         &mut self,
         candidate: &Candidate,
         source: InputSource,
         used_sense: Option<usize>,
+        alt_gloss: bool,
     ) -> String {
         let traditional_text = candidate.text.clone();
         let mut candidate_owned = candidate.clone();
@@ -175,9 +200,14 @@ impl Engine {
         let log_id = self.log_commit(&keys, &candidate.text, source);
         self.meter_commit(&candidate.text, source, false);
         // 上屏带译词的中文候选：那一刻用户看着这条译词，记进词汇（英文候选的中文释义不是学习语言，不记）
+        let shown = if alt_gloss {
+            candidate.alt_translation.as_ref()
+        } else {
+            candidate.translation.as_ref()
+        };
         if !self.private
             && candidate.kind != CandidateKind::English
-            && let Some(translation) = &candidate.translation
+            && let Some(translation) = shown
         {
             for (index, sense) in translation.senses().iter().enumerate() {
                 self.vocabulary.record_commit(
@@ -310,6 +340,7 @@ impl Engine {
             syllables,
             reading: None,
             translation: None,
+            alt_translation: None,
             aux_code: None,
         };
         if !self.knows_word(&candidate)
@@ -637,6 +668,7 @@ impl Engine {
             syllables: joined_syllables,
             reading: None,
             translation: None,
+            alt_translation: None,
             aux_code: None,
         };
         if self.knows_word(&candidate) {

@@ -28,11 +28,11 @@ pub use error::RenderError;
 /// Windows 的字体登记：按字族名找文件、列字族名（设置页用）。
 #[cfg(target_os = "windows")]
 pub use fonts::directwrite as system_fonts;
-pub use fonts::{FontLibrary, UiFont};
+pub use fonts::{FontLibrary, UiFont, candidate_weights};
 pub use frame::{Frame, Mode, Preedit, PreeditSegment, PreeditStyle, Row, Tone};
 pub use layout::Layout;
 pub use renderer::{HitRegion, HitTarget, Rendered, RenderedStatus, Renderer, StatusCell};
-pub use theme::{FontSpec, TextSizes, Theme, ThemeError, ThemeLibrary};
+pub use theme::{FontSpec, FontWeight, TextSizes, Theme, ThemeError, ThemeLibrary};
 
 /// 让 `tiny_skia::Pixmap` 的使用方不用再单独依赖 tiny-skia。
 pub use tiny_skia::Pixmap;

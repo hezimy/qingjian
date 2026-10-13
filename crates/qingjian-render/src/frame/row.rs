@@ -16,6 +16,10 @@ pub struct Row {
     /// 右侧 annotation，按顺序绘制；没有译文时为空。
     pub annotation: Vec<(String, Tone)>,
 
+    /// 第二种学习语言第一条译词在 `annotation` 里的下标（前面是第一种语言与「英 / 日 / 西」标签）。
+    /// 只有一种语言或没开第二种时为 `None`。点译词上屏时按它分语言。
+    pub alt_gloss_from: Option<usize>,
+
     /// 来自云联想：词前画一个小云朵，与本地候选区分。
     pub cloud: bool,
 }
@@ -28,6 +32,7 @@ impl Row {
             text: text.into(),
             code: None,
             annotation: Vec::new(),
+            alt_gloss_from: None,
             cloud: false,
         }
     }

@@ -11,6 +11,8 @@ tiny-skia.workspace = true
 # 主题里的 SVG 图片：解析 + 栅格到 tiny-skia 位图（与上面同一个 tiny-skia）；不要 SVG 文字、系统字体与内嵌位图解码
 resvg = { version = "0.48.1", default-features = false }
 cosmic-text.workspace = true
+# 平台的字体回退表按 unicode script 分脚本；自定义回退表要写这个签名
+unicode-script = "0.5.8"
 zeno.workspace = true
 thiserror.workspace = true
 tracing.workspace = true

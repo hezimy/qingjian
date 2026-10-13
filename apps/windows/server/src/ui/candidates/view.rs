@@ -123,18 +123,19 @@ fn draw_top_line(hdc: HDC, data: &RenderData, y: i32) -> i32 {
         return 0;
     }
     let theme = &data.theme;
-    let height = line_height(hdc, theme.annotation_font);
+    // 拼音行有自己的字号 / 字重 / 颜色（设置里没单给就跟译文一样）
+    let height = line_height(hdc, theme.preedit_font);
     let top = y + theme.row_padding;
     let mut x = theme.padding;
     for (text, kind) in &data.preedit {
         let (color, strike, underline) = match kind {
-            PreeditKind::Typed => (theme.gloss_color, false, false),
+            PreeditKind::Typed => (theme.preedit_color, false, false),
             PreeditKind::Rest => (theme.pos_color, false, false),
             PreeditKind::Corrected => (theme.pos_color, true, false),
             // 辅码码段：与剩余拼音同一个淡色，再压一道下划线把它们区分开
             PreeditKind::AuxCode => (theme.pos_color, false, true),
         };
-        let width = draw_text(hdc, theme.annotation_font, color, x, top, text);
+        let width = draw_text(hdc, theme.preedit_font, color, x, top, text);
         let weight = scale_line(theme);
         if strike {
             let line = RECT {
@@ -158,7 +159,7 @@ fn draw_top_line(hdc: HDC, data: &RenderData, y: i32) -> i32 {
     }
     if !data.preedit.is_empty() {
         let before = concat_before_cursor(&data.preedit, data.cursor);
-        let caret_x = theme.padding + measure(hdc, theme.annotation_font, &before).cx;
+        let caret_x = theme.padding + measure(hdc, theme.preedit_font, &before).cx;
         let caret = RECT {
             left: caret_x,
             top,
@@ -456,7 +457,9 @@ fn draw_word(hdc: HDC, theme: &Theme, row: &Row, x: i32, baseline: i32, small_of
 fn tone_color(theme: &Theme, tone: Tone) -> COLORREF {
     match tone {
         Tone::Gloss => theme.gloss_color,
-        Tone::Fresh => theme.fresh_color,
+        // 设置里关掉「生词用醒目色标出」时，生词跟普通译词同一个色
+        Tone::Fresh if theme.fresh_words => theme.fresh_color,
+        Tone::Fresh => theme.gloss_color,
         Tone::Faint | Tone::Pos | Tone::Separator => theme.pos_color,
         Tone::Code => theme.gloss_color,
     }

@@ -18,9 +18,9 @@ use crate::layout::Layout;
 use crate::renderer::StatusCell;
 use crate::scene::{Effect, Scene, Visual};
 use crate::text::{TextPainter, TextStyle};
-use crate::theme::Theme;
 use crate::theme::file::node::{BorderSpec, BoxSpec, EffectSpec, NodeKind, NodeSpec};
 use crate::theme::file::{ColorSpec, FontRef};
+use crate::theme::{Role, Theme};
 
 use context::Context;
 
@@ -41,8 +41,8 @@ pub(super) struct Builder<'a> {
     /// 候选窗口里各候选产出的节点（第几个候选，节点）：点击区域取它们的外接矩形。
     pub(super) candidate_nodes: Vec<(usize, NodeId)>,
 
-    /// 各候选译文里每条译词的片段节点（第几个候选，第几条，节点）。
-    pub(super) sense_nodes: Vec<(usize, usize, NodeId)>,
+    /// 各候选译文里每条译词的片段节点（第几个候选，第几条，是否第二种语言，节点）。
+    pub(super) sense_nodes: Vec<(usize, usize, bool, NodeId)>,
 }
 
 impl Builder<'_> {
@@ -192,6 +192,35 @@ impl Builder<'_> {
         self.theme.color(color)
     }
 
+    /// 节点颜色，另外按角色（拼音行 / 候选字 / 译文）盖上设置里的颜色。
+    /// 高亮那一支保留主题配色（与高亮底色配套），设置里的颜色只管常态。
+    fn role_color(
+        &self,
+        spec: &ColorSpec,
+        ctx: Context,
+        role: Option<Role>,
+    ) -> crate::color::Color {
+        let (reference, condition_held) = match spec {
+            ColorSpec::Fixed(color) => (color, false),
+            ColorSpec::Switch {
+                condition,
+                then,
+                otherwise,
+            } => {
+                if ctx.holds(condition) {
+                    (then, true)
+                } else {
+                    (otherwise, false)
+                }
+            }
+        };
+        let color = self.theme.color(reference);
+        match role {
+            Some(role) if !condition_held => self.theme.role_color(role, color),
+            _ => color,
+        }
+    }
+
     /// 命名文字样式按倍数换成像素、配上颜色与当前外观的 gamma。
     /// 文字的描边：宽度换成像素、颜色按当前数据与外观取值。
     fn stroke(
@@ -204,6 +233,17 @@ impl Builder<'_> {
 
     fn text_style(&self, font: &FontRef, color: crate::color::Color) -> TextStyle {
         let spec = self.theme.font_ref(font);
+        TextStyle::new(
+            spec.scaled(self.scale),
+            spec.size,
+            color,
+            self.theme.text_gamma(),
+        )
+    }
+
+    /// 拼音行的文字样式：主题样式上再盖设置里的拼音行字号与字重。
+    fn preedit_style(&self, font: &FontRef, color: crate::color::Color) -> TextStyle {
+        let spec = self.theme.preedit_font(font);
         TextStyle::new(
             spec.scaled(self.scale),
             spec.size,

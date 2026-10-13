@@ -27,6 +27,7 @@ pub use error::ThemeError;
 pub(crate) use font::{FamilyId, FontFamilies};
 pub use font::{FontSpec, FontWeight};
 pub use library::ThemeLibrary;
+pub(crate) use text_sizes::Role;
 pub use text_sizes::TextSizes;
 
 use assets::Assets;
@@ -37,7 +38,7 @@ pub(crate) use svg_image::SvgImage;
 type EmbeddedFiles = &'static [(&'static str, &'static [u8])];
 
 /// 内置主题：id、源文件与图片，按设置界面列出的顺序；第一个是缺省主题。
-const BUILTINS: [(&str, &str, EmbeddedFiles); 4] = [
+const BUILTINS: [(&str, &str, EmbeddedFiles); 5] = [
     (
         "qingjian",
         include_str!("../../themes/qingjian/theme.json"),
@@ -107,6 +108,11 @@ const BUILTINS: [(&str, &str, EmbeddedFiles); 4] = [
             ),
         ],
     ),
+    (
+        "eyecare",
+        include_str!("../../themes/eyecare/theme.json"),
+        &[],
+    ),
 ];
 
 /// 最底层的主题：没写 `extends` 的主题都以它为底，它自己不再往下找。
@@ -134,6 +140,15 @@ pub struct Theme {
 
     /// 设置里关了过渡动画时为 `false`：过渡直接跳到终点，循环动画停在第一帧。
     animations: bool,
+
+    /// 设置里的候选高亮底色，盖过主题变量 `accent`（高亮行那块底）。`None` 用主题的。
+    highlight: Option<Color>,
+
+    /// 设置里的候选窗口底色，盖过主题变量 `surface`。`None` 用主题的。
+    surface: Option<Color>,
+
+    /// 生词译词是否用主题的醒目色（`@fresh`）标出。关掉后所有译文都用常态译文色。
+    fresh_words: bool,
 }
 
 impl Theme {
@@ -180,6 +195,9 @@ impl Theme {
             families: Arc::new(FontFamilies::new(&file.text)),
             sizes: TextSizes::default(),
             animations: true,
+            highlight: None,
+            surface: None,
+            fresh_words: true,
             file: Arc::new(file),
             dark,
             assets: Arc::default(),
@@ -205,6 +223,9 @@ impl Theme {
             families: Arc::clone(&self.families),
             sizes: self.sizes,
             animations: self.animations,
+            highlight: self.highlight,
+            surface: self.surface,
+            fresh_words: self.fresh_words,
         }
     }
 
@@ -214,6 +235,35 @@ impl Theme {
             sizes,
             ..self.clone()
         }
+    }
+
+    /// 同一主题换上设置里的候选高亮底色；`None` 用主题的。
+    pub fn with_highlight(&self, highlight: Option<Color>) -> Self {
+        Self {
+            highlight,
+            ..self.clone()
+        }
+    }
+
+    /// 同一主题换上设置里的候选窗口底色；`None` 用主题的。
+    pub fn with_surface(&self, surface: Option<Color>) -> Self {
+        Self {
+            surface,
+            ..self.clone()
+        }
+    }
+
+    /// 同一主题换上设置里的「生词用醒目色标出」开关。
+    pub fn with_fresh_words(&self, fresh_words: bool) -> Self {
+        Self {
+            fresh_words,
+            ..self.clone()
+        }
+    }
+
+    /// 生词译词是否用主题的醒目色（`@fresh`）标出。
+    pub(crate) fn fresh_words(&self) -> bool {
+        self.fresh_words
     }
 
     /// 同一主题换上设置里的动画开关。
@@ -283,16 +333,51 @@ impl Theme {
         &self.file
     }
 
-    /// 颜色引用按当前外观取值；变量不存在时透明。
+    /// 颜色引用按当前外观取值；设置里的候选高亮底色盖过 `accent`，窗口底色盖过 `surface`
+    /// （各内置主题的候选高亮块都填的 `@accent`，窗口与状态条都填的 `@surface`，见 `themes/*/theme.json`）。
     pub(crate) fn color(&self, color: &ColorRef) -> Color {
         match color {
             ColorRef::Literal(color) => *color,
-            ColorRef::Variable(name) => self
-                .file
-                .variables
-                .get(name)
-                .map_or(Color::rgba(0, 0, 0, 0), |value| value.get(self.dark).0),
+            ColorRef::Variable(name) => match name.as_str() {
+                "accent" => self.highlight.unwrap_or_else(|| self.variable(name)),
+                "surface" => self.surface.unwrap_or_else(|| self.variable(name)),
+                _ => self.variable(name),
+            },
         }
+    }
+
+    /// 主题文件里某个颜色变量在当前外观下的值；变量不存在时透明。
+    fn variable(&self, name: &str) -> Color {
+        self.file
+            .variables
+            .get(name)
+            .map_or(Color::rgba(0, 0, 0, 0), |value| value.get(self.dark).0)
+    }
+
+    /// 候选列表高亮块当前用的底色：设置里填了就是它，否则是主题的 `accent`。设置界面拿它当占位提示。
+    pub fn highlight_color(&self) -> Color {
+        self.highlight.unwrap_or_else(|| self.variable("accent"))
+    }
+
+    /// 候选窗口当前用的底色：设置里填了就是它，否则是主题的 `surface`。设置界面拿它当占位提示。
+    pub fn surface_color(&self) -> Color {
+        self.surface.unwrap_or_else(|| self.variable("surface"))
+    }
+
+    /// 主题里某个颜色变量在当前外观下的值（设置界面拿它当颜色框的占位提示）。
+    pub fn variable_color(&self, name: &str) -> Color {
+        self.variable(name)
+    }
+
+    /// 主题给某个文字样式单独指定的字族名（`"system"` 表示界面字体）；这一项没写时返回空
+    /// （那种样式跟 `text.family`，最终就是界面字体）。设置界面拿它提示「留空用主题字体」到底是什么。
+    pub fn style_families(&self, name: &str) -> Vec<String> {
+        self.file
+            .text
+            .styles
+            .get(name)
+            .and_then(|spec| spec.family.as_ref())
+            .map_or_else(Vec::new, |families| families.0.clone())
     }
 
     /// 主题里写的图片路径对应的位图；没有、没读进来或是 SVG 时为 `None`。
@@ -308,7 +393,26 @@ impl Theme {
     /// 命名文字样式（点）。
     pub(crate) fn font(&self, name: &str) -> FontSpec {
         let spec = self.families.style(name).unwrap_or(FALLBACK_FONT);
-        text_sizes::scaled(spec, self.sizes.ratio(name, |base| self.theme_size(base)))
+        let spec = text_sizes::scaled(spec, self.sizes.ratio(name, |base| self.theme_size(base)));
+        match Role::of_style(name).and_then(|role| self.sizes.weight(role)) {
+            Some(weight) => FontSpec { weight, ..spec },
+            None => spec,
+        }
+    }
+
+    /// 拼音行的文字样式：主题给的样式上再盖设置里的拼音行字号与字重（绝对字号，不跟候选字缩放）。
+    pub(crate) fn preedit_font(&self, font: &FontRef) -> FontSpec {
+        let spec = self.font_ref(font);
+        text_sizes::overridden(
+            spec,
+            self.sizes.size(Role::Preedit),
+            self.sizes.preedit_weight,
+        )
+    }
+
+    /// 设置里给这一处指定的文字颜色；没填返回 `color` 原样。
+    pub(crate) fn role_color(&self, role: Role, color: Color) -> Color {
+        self.sizes.color(role).unwrap_or(color)
     }
 
     /// 字族表，渲染器按 [`FamilyId`] 查回退链；两份 `Theme` 共用同一张表时指针相同。
@@ -379,13 +483,42 @@ mod tests {
         assert_eq!(theme.id(), "qingjian");
         assert!(Theme::builtin("wechat", true).is_some());
         assert!(Theme::builtin("nope", false).is_none());
+        // 青简绿保持原始配色，护眼绿那套浅灰绿在 eyecare 主题里
         assert_eq!(
             theme.color(&ColorRef::Variable("accent".to_owned())),
-            Color::rgba(176, 206, 125, 127)
+            Color::rgba(0xb0, 0xce, 0x7d, 0x7f)
         );
         assert_eq!(
             Theme::dark().color(&ColorRef::Variable("accent".to_owned())),
             Color::rgb(36, 76, 36)
+        );
+    }
+
+    /// 设置里的候选高亮底色盖过主题的 `accent`，其它变量照旧。
+    #[test]
+    fn highlight_override_replaces_accent_only() {
+        let theme = Theme::light().with_highlight(Some(Color::rgb(0x12, 0x34, 0x56)));
+        assert_eq!(
+            theme.color(&ColorRef::Variable("accent".to_owned())),
+            Color::rgb(0x12, 0x34, 0x56)
+        );
+        assert_eq!(theme.highlight_color(), Color::rgb(0x12, 0x34, 0x56));
+        // 文字色不受影响
+        assert_eq!(
+            theme.color(&ColorRef::Variable("text".to_owned())),
+            Theme::light().color(&ColorRef::Variable("text".to_owned()))
+        );
+        // 换外观 / 换字号之后覆盖还在（设置没变）
+        let dark = theme.with_dark(true);
+        assert_eq!(
+            dark.color(&ColorRef::Variable("accent".to_owned())),
+            Color::rgb(0x12, 0x34, 0x56)
+        );
+        // 清掉恢复主题色
+        let plain = theme.with_highlight(None);
+        assert_eq!(
+            plain.color(&ColorRef::Variable("accent".to_owned())),
+            Color::rgba(0xb0, 0xce, 0x7d, 0x7f)
         );
     }
 
@@ -476,5 +609,105 @@ mod tests {
         assert_eq!(sized.with_dark(true).font("candidate").size, 26.0);
         // 不是正数当没填
         assert_eq!(TextSizes::new(-1.0, f32::NAN), TextSizes::default());
+    }
+
+    /// 护眼绿接在青简绿上：只换窗口底色与选中高亮，没改过的变量跟青简绿一模一样。
+    #[test]
+    fn eyecare_theme_overrides_surface_and_accent() {
+        let theme = Theme::builtin("eyecare", false).expect("内置护眼绿");
+        assert_eq!(theme.id(), "eyecare");
+        assert_eq!(
+            theme.color(&ColorRef::Variable("accent".to_owned())),
+            Color::rgb(0xe3, 0xec, 0xe4)
+        );
+        assert_eq!(theme.surface_color(), Color::rgb(0xf6, 0xf8, 0xf5));
+        // 青简绿已经还原成原始配色，护眼绿这套浅灰绿只存在于 eyecare
+        assert_ne!(
+            theme.color(&ColorRef::Variable("accent".to_owned())),
+            Theme::light().color(&ColorRef::Variable("accent".to_owned()))
+        );
+        // 没被护眼绿碰过的变量照旧继承
+        assert_eq!(
+            theme.color(&ColorRef::Variable("text".to_owned())),
+            Theme::light().color(&ColorRef::Variable("text".to_owned()))
+        );
+        // 深色下也是青简绿那套（护眼绿只动浅色）
+        assert_eq!(
+            Theme::builtin("eyecare", true).unwrap().surface_color(),
+            Color::rgb(0x1e, 0x1e, 0x1e)
+        );
+        // 状态条：同色调、不画投影（没有投影，位图就等于可见的那一条，拖动范围才跟看到的一致）
+        let status = &theme.file().status;
+        assert!(status.effects.is_empty());
+        assert_eq!(
+            theme.color(&status.background),
+            Color::rgb(0xf6, 0xf8, 0xf5)
+        );
+        assert_eq!(theme.color(&status.normal), Color::rgb(0x3a, 0x4b, 0x40));
+        assert_eq!(
+            theme.color(&status.emphasized),
+            Color::rgb(0x3a, 0x4b, 0x40)
+        );
+        assert_eq!(theme.color(&status.gear), Color::rgb(0x3a, 0x4b, 0x40));
+        assert_eq!(theme.color(&status.separator), Color::rgb(0xe3, 0xec, 0xe4));
+        // 青简绿自己仍留着投影与灰色格间线
+        let base = Theme::light();
+        assert!(!base.file().status.effects.is_empty());
+        assert_ne!(
+            base.color(&base.file().status.normal),
+            Color::rgb(0x3a, 0x4b, 0x40)
+        );
+    }
+
+    /// 设置里的窗口底色盖过主题的 `surface`，其它变量照旧。
+    #[test]
+    fn surface_override_replaces_surface_only() {
+        let theme = Theme::light().with_surface(Some(Color::rgb(0xf6, 0xf8, 0xf5)));
+        assert_eq!(
+            theme.color(&ColorRef::Variable("surface".to_owned())),
+            Color::rgb(0xf6, 0xf8, 0xf5)
+        );
+        assert_eq!(theme.surface_color(), Color::rgb(0xf6, 0xf8, 0xf5));
+        // 高亮色跟主题色都不受影响
+        assert_eq!(
+            theme.color(&ColorRef::Variable("accent".to_owned())),
+            Theme::light().color(&ColorRef::Variable("accent".to_owned()))
+        );
+        assert_eq!(
+            theme.with_dark(true).surface_color(),
+            Color::rgb(0xf6, 0xf8, 0xf5)
+        );
+        // 清掉恢复主题底色
+        assert_eq!(
+            theme.with_surface(None).surface_color(),
+            Color::rgb(0xff, 0xff, 0xff)
+        );
+    }
+
+    /// 生词醒目标色开关：默认开，关掉不影响主题 `@fresh` 本身的值。
+    #[test]
+    fn fresh_words_toggle_keeps_theme_variables() {
+        let theme = Theme::light();
+        assert!(theme.fresh_words());
+        let off = theme.with_fresh_words(false);
+        assert!(!off.fresh_words());
+        assert_eq!(
+            off.color(&ColorRef::Variable("fresh".to_owned())),
+            Color::rgb(0xff, 0x8d, 0x28)
+        );
+        // 换外观不丢开关
+        assert!(!off.with_dark(true).fresh_words());
+    }
+
+    /// 主题给自己指定了字族的样式，设置界面拿它提示「留空用主题字体」到底是什么。
+    #[test]
+    fn style_families_read_from_theme() {
+        let sakura = Theme::builtin("sakura", false).unwrap();
+        assert_eq!(
+            sakura.style_families("candidate"),
+            ["Songti SC", "SimSun", "system"]
+        );
+        // 没写 family 的样式返回空（跟 `text.family` / 界面字体走）
+        assert!(Theme::light().style_families("candidate").is_empty());
     }
 }

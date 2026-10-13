@@ -196,6 +196,7 @@ impl Host {
         let sizes = TextSizes {
             candidate: general.candidate_font_size.get(),
             annotation: general.annotation_font_size.get(),
+            ..TextSizes::default()
         };
         self.themes
             .resolve(general.theme_id(), false)

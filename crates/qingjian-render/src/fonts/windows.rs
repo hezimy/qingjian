@@ -31,20 +31,48 @@ pub(super) fn ui_weight_fonts() -> Vec<PathBuf> {
     .collect()
 }
 
-/// 汉字字体（常规、粗、细三个文件）加日文回退。
-pub(super) fn script_fonts(locale: &str) -> Vec<PathBuf> {
+/// 汉字字体（常规、粗、细三个文件）；日文环境下 Yu Gothic 自己就是汉字字体。
+pub(super) fn han_fonts(locale: &str) -> Vec<PathBuf> {
     let dir = fonts_dir();
-    let mut fonts = Vec::new();
     if locale.starts_with("zh-TW") || locale.starts_with("zh-HK") {
-        fonts.extend(["msjh.ttc", "msjhbd.ttc", "msjhl.ttc"].map(|file| dir.join(file)));
-    } else if !locale.starts_with("ja") {
-        fonts.extend(["msyh.ttc", "msyhbd.ttc", "msyhl.ttc"].map(|file| dir.join(file)));
+        ["msjh.ttc", "msjhbd.ttc", "msjhl.ttc"]
+            .map(|file| dir.join(file))
+            .to_vec()
+    } else if locale.starts_with("ja") {
+        japanese_fonts()
+    } else {
+        ["msyh.ttc", "msyhbd.ttc", "msyhl.ttc"]
+            .map(|file| dir.join(file))
+            .to_vec()
     }
-    fonts.push(dir.join("YuGothR.ttc"));
-    fonts.push(dir.join("yugothm.ttc"));
-    fonts.push(dir.join("YuGothB.ttc"));
-    fonts.push(dir.join("YuGothL.ttc"));
+}
+
+/// 日文字体（常规、Medium、粗、细四个文件）。
+pub(super) fn japanese_fonts() -> Vec<PathBuf> {
+    let dir = fonts_dir();
+    ["YuGothR.ttc", "yugothm.ttc", "YuGothB.ttc", "YuGothL.ttc"]
+        .into_iter()
+        .map(|file| dir.join(file))
+        .collect()
+}
+
+/// 汉字字体加日文回退：假名（日语译文的假名部分）靠后者。
+pub(super) fn script_fonts(locale: &str) -> Vec<PathBuf> {
+    let mut fonts = han_fonts(locale);
+    if !locale.starts_with("ja") {
+        fonts.extend(japanese_fonts());
+    }
     fonts
+}
+
+/// 只为回退加载、不该在逐字形兜底里抢汉字的字体，见 `fonts::fallback_only_families`。
+/// 日文环境里 Yu Gothic 是汉字字体本身，不能禁。
+pub(super) fn fallback_only_fonts(locale: &str) -> Vec<PathBuf> {
+    if locale.starts_with("ja") {
+        Vec::new()
+    } else {
+        japanese_fonts()
+    }
 }
 
 pub(super) fn emoji_fonts() -> Vec<PathBuf> {

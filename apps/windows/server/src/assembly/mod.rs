@@ -38,6 +38,13 @@ pub fn assemble(spec: &AssemblySpec) -> Result<Engine, ServerError> {
             spec.user_dir.as_deref(),
         )?));
     }
+    if let Some((language, path)) = &spec.alt_glossary {
+        engine = engine.with_alt_translator(Box::new(load_glossary(
+            *language,
+            path,
+            spec.user_dir.as_deref(),
+        )?));
+    }
     if let Some(dir) = &spec.user_dir {
         engine = engine
             .with_usage_meter(Box::new(UsageStats::open(dir.join("usage.tsv"))))

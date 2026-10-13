@@ -1,0 +1,32 @@
+// 护眼绿：青简绿的护眼版。浅色下候选窗底 #F6F8F5、选中行高亮 #E3ECE4，候选字 17 点、译文 15 点、常规字重；
+// 悬浮状态条同色调（#F6F8F5 底、#3A4B40 字与齿轮、#E3ECE4 格间细线）且不画投影。
+// 其余配色与结构都继承青简绿——青简绿改了窗口布局、装饰或深色配色，这里跟着一起变。
+{
+  "extends": "qingjian",
+  "schema": 1,
+  "meta": { "id": "eyecare", "name": "护眼绿", "author": "青简", "license": "GPL-3.0-or-later" },
+
+  "variables": {
+    "surface": { "light": "#F6F8F5", "dark": "#1e1e1e" },
+    "accent": { "light": "#E3ECE4", "dark": "#244c24" }
+  },
+
+  "text": {
+    "styles": {
+      "candidate": { "size": 17, "line_height": 20, "weight": 400 },
+      "annotation": { "size": 15, "line_height": 19, "weight": 400 },
+      "index": { "size": 12, "line_height": 15, "weight": 400 }
+    }
+  },
+
+  // 悬浮状态条：同色调、不画投影。没有投影后位图就等于可见的那条，
+  // 长按拖动的范围与看到的一致，也能贴着任务栏边上停住。
+  "status": {
+    "background": "#F6F8F5",
+    "normal": "#3A4B40",
+    "emphasized": "#3A4B40",
+    "gear": "#3A4B40",
+    "separator": "#E3ECE4",
+    "effects": []
+  }
+}

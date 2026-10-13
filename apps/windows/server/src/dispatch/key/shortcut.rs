@@ -16,7 +16,20 @@ impl Router {
         if chord == KeyModifiers::default() {
             return None;
         }
+        // 第二种学习语言：Ctrl+Alt+数字。纯 Alt+数字会被 Windows 当成菜单快捷键，TSF 收不到。
+        let alt_language = KeyModifiers {
+            ctrl: true,
+            alt: true,
+            ..KeyModifiers::default()
+        };
         let (first, second) = self.config.translation_keys;
+        if chord == alt_language
+            && chord != first
+            && chord != second
+            && self.engine.has_alt_translator()
+        {
+            return Some(self.commit_alt_translation_on_page(digit));
+        }
         let effect = if chord == first {
             self.commit_translation_on_page(digit, 0)
         } else if chord == second {
@@ -27,6 +40,21 @@ impl Router {
             return None;
         };
         Some(effect)
+    }
+
+    /// 上屏第 `digit` 个候选的第二种语言译词；没有那条译文就吞掉按键不动。
+    fn commit_alt_translation_on_page(&mut self, digit: usize) -> Effect {
+        let Some(candidate) = self.annotated_candidate_on_page(digit) else {
+            tracing::debug!(digit, "这一格没有候选");
+            return Effect::Navigated;
+        };
+        match self.engine.commit_alt_translation(&candidate, 0) {
+            Some(text) => Effect::Changed(Some(text)),
+            None => {
+                tracing::debug!(digit, "这个候选没有第二种语言的译文");
+                Effect::Navigated
+            }
+        }
     }
 
     /// 上屏第 `digit` 个候选的第 `sense` 条译文；没有那条译文就吞掉按键不动。

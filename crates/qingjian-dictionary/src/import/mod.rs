@@ -1,10 +1,11 @@
-//! 导入词库：把用户给的文件（青简 TSV、Rime `.dict.yaml`、现成的 `.qj`）变成用户词库目录里的一个 `.qj`。
+//! 导入词库：把用户给的文件（青简 TSV、Rime `.dict.yaml`、搜狗 `.bin` / `.scel`、现成的 `.qj`）变成用户词库目录里的一个 `.qj`。
 //!
 //! 导入时只做格式转换，不做拼音校验：不合法的音节查不到而已，不影响别的词。
 //! 目标文件名取源文件的主干（`law.dict.yaml` → `law.qj`），已存在就覆盖（重新导入即更新）。
 
 mod imported;
 mod rime;
+mod sogou;
 
 use std::path::{Path, PathBuf};
 
@@ -30,6 +31,14 @@ pub fn import(source: &Path, dest_dir: &Path) -> Result<Imported, DictionaryErro
     let (dictionary, metadata) = if Container::is_qj(source) {
         let dictionary = Dictionary::open_qj(source)?;
         let metadata = dictionary.metadata().cloned().unwrap_or_default();
+        (dictionary, metadata)
+    } else if let Some((tsv, name)) = sogou::try_convert(source)? {
+        let dictionary = Dictionary::parse(&tsv)?;
+        let metadata = Metadata {
+            name,
+            source: source.display().to_string(),
+            ..Metadata::default()
+        };
         (dictionary, metadata)
     } else {
         let text = std::fs::read_to_string(source)?;
@@ -63,7 +72,16 @@ pub fn import(source: &Path, dest_dir: &Path) -> Result<Imported, DictionaryErro
 /// `law.dict.yaml` → `law`，`dict.tsv` → `dict`。
 pub(crate) fn strip_extensions(file_name: &str) -> String {
     let mut stem = file_name;
-    for suffix in [".dict.yaml", ".yaml", ".yml", ".tsv", ".txt", ".qj"] {
+    for suffix in [
+        ".dict.yaml",
+        ".yaml",
+        ".yml",
+        ".tsv",
+        ".txt",
+        ".qj",
+        ".scel",
+        ".bin",
+    ] {
         if let Some(s) = stem.strip_suffix(suffix) {
             stem = s;
             break;

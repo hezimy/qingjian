@@ -228,7 +228,7 @@ fn hit_regions(
     scene: &Scene,
     root: taffy::NodeId,
     candidates: &[(usize, taffy::NodeId)],
-    senses: &[(usize, usize, taffy::NodeId)],
+    senses: &[(usize, usize, bool, taffy::NodeId)],
 ) -> Result<Vec<HitRegion>, RenderError> {
     let mut regions: Vec<HitRegion> = Vec::new();
     let mut add = |target: HitTarget, node: taffy::NodeId| -> Result<(), RenderError> {
@@ -245,8 +245,15 @@ fn hit_regions(
         }
         Ok(())
     };
-    for &(candidate, sense, node) in senses {
-        add(HitTarget::Translation { candidate, sense }, node)?;
+    for &(candidate, sense, alt, node) in senses {
+        add(
+            HitTarget::Translation {
+                candidate,
+                sense,
+                alt,
+            },
+            node,
+        )?;
     }
     for &(candidate, node) in candidates {
         add(HitTarget::Candidate(candidate), node)?;

@@ -44,13 +44,19 @@ impl Engine {
             if candidate.kind == CandidateKind::English {
                 continue;
             }
-            let Some(translation) = &candidate.translation else {
-                continue;
-            };
-            for sense in translation.senses() {
-                let key = (translation.language, sense.text.clone());
-                if !self.displayed.contains(&key) {
-                    self.displayed.push(key);
+            // 第一种与第二种学习语言的译词都算「看到过」，不然第二门语言的生词标记永远清不掉
+            for translation in [
+                candidate.translation.as_ref(),
+                candidate.alt_translation.as_ref(),
+            ]
+            .into_iter()
+            .flatten()
+            {
+                for sense in translation.senses() {
+                    let key = (translation.language, sense.text.clone());
+                    if !self.displayed.contains(&key) {
+                        self.displayed.push(key);
+                    }
                 }
             }
         }
@@ -191,6 +197,7 @@ impl Engine {
         self.meter.flush();
         self.vocabulary.flush();
         self.translator.flush();
+        self.alt_translator.flush();
     }
 
     /// 词库 / 用户词 / 学习数据变了，整句格子候选全部作废。

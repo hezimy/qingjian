@@ -38,6 +38,10 @@ pub fn list(dir: &Path) -> Vec<(String, PathBuf)> {
             let extension = p.extension()?.to_str()?;
             let rank = EXTENSIONS.iter().position(|e| *e == extension)?;
             let stem = p.file_stem()?.to_str()?.to_owned();
+            // macOS 打包会带上 AppleDouble（`._animals.qj`），不是词库。
+            if stem.starts_with("._") {
+                return None;
+            }
             Some((stem, rank, p))
         })
         .collect();
@@ -105,7 +109,14 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("qingjian-extra-dicts-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
-        for name in ["idioms.qj", "idioms.tsv", "food.tsv", "notes.txt"] {
+        // `._idioms.qj` 是 macOS 打包带出来的 AppleDouble，不该被当词库列出来。
+        for name in [
+            "idioms.qj",
+            "idioms.tsv",
+            "food.tsv",
+            "notes.txt",
+            "._idioms.qj",
+        ] {
             std::fs::write(dir.join(name), b"").unwrap();
         }
 

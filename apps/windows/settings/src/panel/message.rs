@@ -7,7 +7,8 @@ pub(crate) enum Message {
     Navigate(Option<String>),
 
     // 通用页
-    LearningLanguage(Option<usize>),
+    /// 勾上 / 去掉一门学习语言。`code` 是语言代码，`"off"` 是「不显示译文」。
+    LearningPick(&'static str, bool),
     PageSize(Option<f64>),
     Scheme(Option<usize>),
     ShuangpinRawPreedit(bool),
@@ -40,13 +41,19 @@ pub(crate) enum Message {
     Layout(Option<usize>),
     Preedit(Option<usize>),
     Renderer(Option<usize>),
-    /// 字体框里的文字变了：空或正好是某个字族名就落盘。
-    FontQuery(String),
-    /// 从提示里选了一个字族。
+    /// 字体下拉里选了一个字族；「系统字体」是空串。
     Font(String),
     /// 字号框改了；清空为 `None`（用主题的）。
     CandidateFontSize(Option<f64>),
     AnnotationFontSize(Option<f64>),
+    /// 拼音行（录入框）字号框改了；清空为 `None`（用主题的）。
+    InputFontSize(Option<f64>),
+    /// 字重下拉（`style` = `input` / `candidate` / `annotation`）；0 为用主题的字重。
+    FontWeight(String, u16),
+    /// 颜色框（`style` = `input` / `candidate` / `annotation` / `highlight` / `surface`）；空为用主题的。
+    FontColor(String, String),
+    /// 生词译词用主题的醒目色标出。
+    FreshWords(bool),
     Animations(bool),
     ResetFontSizes,
     StatusBar(bool),

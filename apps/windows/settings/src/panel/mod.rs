@@ -59,11 +59,8 @@ pub(crate) struct Settings {
     /// 最近一次词库操作的结果，显示在词库页。
     dictionary_status: String,
 
-    /// 系统里的字族名（DirectWrite），「字体」框的提示用。
+    /// 系统里的字族名（DirectWrite），「字体」下拉的条目用。
     families: Vec<String>,
-
-    /// 「字体」框里正在敲的文字；`None` 显示配置里的值。
-    font_query: Option<String>,
 }
 
 impl Settings {
@@ -98,20 +95,83 @@ impl Settings {
         self.reload();
     }
 
-    /// 字号框（`style` 是 `candidate` / `annotation`）：清空或填 0 回到主题的，不限范围；
+    /// 勾 / 去掉一门学习语言。`code` 是语言代码，`"off"` 是「不显示译文」。
+    /// 最多两种：勾满两种后再勾一门就挤掉一门；一门都不剩写回 `off`。
+    fn set_learning_language(&mut self, code: &str, on: bool) {
+        if code == "off" {
+            if on {
+                self.save("general", "learning_language", "off");
+                self.save("general", "learning_language_2", "");
+            }
+            return;
+        }
+        let mut selected = Vec::new();
+        if !self.config.general.learning_language_off() {
+            selected.push(self.config.general.learning_language.trim().to_owned());
+            if let Some(language) = self.config.general.secondary_learning_language() {
+                selected.push(language.code().to_owned());
+            }
+        }
+        if on {
+            if !selected.iter().any(|item| item == code) {
+                if selected.len() >= 2 {
+                    selected.pop();
+                }
+                selected.push(code.to_owned());
+            }
+        } else {
+            selected.retain(|item| item != code);
+        }
+        if selected.is_empty() {
+            self.save("general", "learning_language", "off");
+            self.save("general", "learning_language_2", "");
+        } else {
+            let second = selected.get(1).cloned().unwrap_or_default();
+            self.save("general", "learning_language", selected[0].clone());
+            self.save("general", "learning_language_2", second);
+        }
+    }
+
+    /// 字号框（`style` 是 `input` / `candidate` / `annotation`）：清空或填 0 回到主题的，不限范围；
     /// 没设过时框里显示主题的字号，原样交回不写（见 [`qingjian_platform::FontSize::edited`]）。
     fn save_font_size(&mut self, style: &str, size: Option<f64>) {
         let current = match style {
             "candidate" => self.config.general.candidate_font_size,
+            "input" => self.config.general.input_font_size,
             _ => self.config.general.annotation_font_size,
         };
         let themes = ThemeLibrary::load(qingjian_platform::dirs::themes_dir().as_deref());
-        let theme_size = themes
-            .resolve(self.config.general.theme_id(), false)
-            .theme_size(style);
+        let theme = themes.resolve(self.config.general.theme_id(), false);
+        // 拼音行的节点在主题里用「译文」样式；没写单独的 preedit 样式时拿它的字号当参考值
+        let theme_size = theme.theme_size(style).or_else(|| {
+            (style == "input")
+                .then(|| theme.theme_size("annotation"))
+                .flatten()
+        });
         if let Some(size) = current.edited(size.filter(|size| !size.is_nan()), theme_size) {
             self.save("general", &format!("{style}_font_size"), size);
         }
+    }
+
+    /// 字重下拉（`style` = `input` / `candidate` / `annotation`）：0 用主题的字重，其余按配置接受的 1–1000 存。
+    fn save_font_weight(&mut self, style: &str, weight: u16) {
+        let value = if (1..=1000).contains(&weight) {
+            i64::from(weight)
+        } else {
+            0
+        };
+        self.save("general", &format!("{style}_weight"), value);
+    }
+
+    /// 颜色框（`style` = `input` / `candidate` / `annotation` / `highlight`）：`#RRGGBB`；写得不对就落盘空串（用主题色）。
+    fn save_font_color(&mut self, style: &str, color: &str) {
+        let hex = color.trim().trim_start_matches('#');
+        let value = if hex.len() == 6 && hex.chars().all(|c| c.is_ascii_hexdigit()) {
+            format!("#{}", hex.to_ascii_uppercase())
+        } else {
+            String::new()
+        };
+        self.save("general", &format!("{style}_color"), value);
     }
 
     /// 落盘一个字符串数组再重读。

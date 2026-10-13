@@ -124,6 +124,7 @@ fn translate_candidate(text: String) -> Candidate {
         syllables: Vec::new(),
         reading: None,
         translation: None,
+        alt_translation: None,
         aux_code: None,
     }
 }

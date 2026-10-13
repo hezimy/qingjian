@@ -91,6 +91,39 @@ fn swap_translator(
     }
 }
 
+/// 第二种学习语言变了就换它的释义表；语义与 [`swap_translator`] 一致，只是换的是 `alt_translator`。
+/// 换成功（或关掉）返回 true。
+fn swap_alt_translator(
+    engine: &mut Engine,
+    language: Option<Language>,
+    root: &Path,
+    user_dir: Option<&Path>,
+) -> bool {
+    let Some(language) = language else {
+        engine.set_alt_translator(Box::new(NoTranslator));
+        tracing::info!("第二种学习语言已关");
+        return true;
+    };
+    let Some(path) = assembly::glossary_file(root, language) else {
+        tracing::warn!(
+            language = language.code(),
+            "没有这门语言的释义表，第二种学习语言不变"
+        );
+        return false;
+    };
+    match assembly::load_glossary(language, &path, user_dir) {
+        Ok(glossary) => {
+            tracing::info!(language = language.code(), "第二释义表已切换");
+            engine.set_alt_translator(Box::new(glossary));
+            true
+        }
+        Err(error) => {
+            tracing::warn!(%error, "第二释义表加载失败，第二种学习语言不变");
+            false
+        }
+    }
+}
+
 impl Router {
     /// 检查更新查到了要提示的新版本（开关关着、本地开发包都不算）。
     pub(super) fn update_available(&self) -> bool {
@@ -137,6 +170,7 @@ impl Router {
             applied_aux_code: config.aux_code.clone(),
             dictionary_files,
             applied_language: assembly::learning_language(config),
+            applied_alt_language: config.general.secondary_learning_language(),
             update: config.update.clone(),
             updates,
         });
@@ -263,6 +297,17 @@ impl Router {
             )
         {
             reload.applied_language = language;
+        }
+        let alt_language = config.general.secondary_learning_language();
+        if alt_language != reload.applied_alt_language
+            && swap_alt_translator(
+                &mut self.engine,
+                alt_language,
+                &reload.root,
+                reload.dirs.user_root.as_deref(),
+            )
+        {
+            reload.applied_alt_language = alt_language;
         }
         if config.dictionaries != reload.applied_dictionaries {
             reload.applied_dictionaries = config.dictionaries.clone();

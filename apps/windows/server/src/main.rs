@@ -174,6 +174,8 @@ fn main() {
         _ => {}
     }
     let language = learning_language(&config);
+    // 第二种学习语言（`learning_language_2`）；第一种关着 / 写空 / 与第一种相同时为 `None`。
+    let alt_language = config.general.secondary_learning_language();
     // 装机布局与 exe 同级，开发布局是仓库 `ime/`；都找不到回落工作目录。
     let root = resources::bundled_root().unwrap_or_else(|| PathBuf::from("."));
     let dict = std::env::var_os("QINGJIAN_DICT")
@@ -185,11 +187,19 @@ fn main() {
             .or_else(|| glossary_file(&root, language))
             .filter(|path| path.is_file())
     });
+    let alt_glossary_path = alt_language.and_then(|language| {
+        std::env::var_os("QINGJIAN_ALT_GLOSSARY")
+            .map(PathBuf::from)
+            .or_else(|| glossary_file(&root, language))
+            .filter(|path| path.is_file())
+    });
     let glossary = language.zip(glossary_path);
+    let alt_glossary = alt_language.zip(alt_glossary_path);
     let bundled_dicts_dir = Some(root.join("data/generated/dicts")).filter(|dir| dir.is_dir());
     let bundled_codes_dir = Some(root.join("data/generated/codes")).filter(|dir| dir.is_dir());
     let spec = AssemblySpec {
         glossary: glossary.clone(),
+        alt_glossary,
         english_glossary: glossary_file(&root, Language::Chinese),
         english: generated(&root, "english.tsv"),
         emoji: ["emoji-zh.tsv", "emoji-en.tsv"]

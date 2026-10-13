@@ -55,6 +55,8 @@ fn row(row: &Row) -> qingjian_render::Row {
                 (text.clone(), tone)
             })
             .collect(),
+        // macOS 壳只画第一种学习语言的译词，没有第二种，点译词也按单语言处理
+        alt_gloss_from: None,
         cloud: row.cloud,
     }
 }
