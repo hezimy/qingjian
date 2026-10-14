@@ -165,6 +165,7 @@ impl From<&Config> for RouterConfig {
             theme: config.general.theme_id().to_owned(),
             text: TextStyleSettings {
                 input_size: config.general.input_font_size,
+                index_size: config.general.index_font_size,
                 candidate_size: config.general.candidate_font_size,
                 annotation_size: config.general.annotation_font_size,
                 input_weight: config.general.input_weight,

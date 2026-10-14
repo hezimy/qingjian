@@ -231,10 +231,11 @@ horizontal_grid = false
 renderer = "qingjian"
 # 候选窗口字体（字族名，如 "LXGW WenKai"）；空为系统字体。只对青简渲染器生效，没装这个字体时自动回到系统字体
 font = ""
-# 候选字、译文、拼音行的字号（点），盖过主题；0 用主题的。只对青简渲染器生效
+# 候选字、译文、拼音行、序号的字号（点），盖过主题；0 用主题的。只对青简渲染器生效
 candidate_font_size = 0
 annotation_font_size = 0
 input_font_size = 0
+index_font_size = 0
 # 候选字、译文、拼音行的字重（100–900）；0 用主题的
 candidate_weight = 0
 annotation_weight = 0

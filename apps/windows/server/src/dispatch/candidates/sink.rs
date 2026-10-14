@@ -4,12 +4,15 @@ use qingjian_platform::protocol::{Frame, ScreenRect};
 use qingjian_platform::{CandidateRenderer, FontSize};
 use qingjian_render::Mode;
 
-/// 拼音行（录入框）、候选字、译文三处的字号、字重与颜色覆盖（`[general]` 下的同名项）。
+/// 拼音行（录入框）、候选字、译文的字号、字重与颜色，外加序号字号的覆盖（`[general]` 下的同名项）。
 /// 字号 0 = 用主题的；字重 0 = 用主题的；颜色空 = 用主题的。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TextStyleSettings {
     /// 拼音行字号（`[general] input_font_size`）。
     pub input_size: FontSize,
+
+    /// 序号字号（`[general] index_font_size`）。
+    pub index_size: FontSize,
 
     /// 候选字字号（`[general] candidate_font_size`）。
     pub candidate_size: FontSize,

@@ -48,6 +48,8 @@ pub(crate) enum Message {
     AnnotationFontSize(Option<f64>),
     /// 拼音行（录入框）字号框改了；清空为 `None`（用主题的）。
     InputFontSize(Option<f64>),
+    /// 序号字号框改了；清空为 `None`（用主题的）。
+    IndexFontSize(Option<f64>),
     /// 字重下拉（`style` = `input` / `candidate` / `annotation`）；0 为用主题的字重。
     FontWeight(String, u16),
     /// 颜色框（`style` = `input` / `candidate` / `annotation` / `highlight` / `surface`）；空为用主题的。

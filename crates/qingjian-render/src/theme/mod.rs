@@ -403,10 +403,16 @@ impl Theme {
     pub(crate) fn font(&self, name: &str) -> FontSpec {
         let spec = self.families.style(name).unwrap_or(FALLBACK_FONT);
         let spec = text_sizes::scaled(spec, self.sizes.ratio(name, |base| self.theme_size(base)));
-        match Role::of_style(name).and_then(|role| self.sizes.weight(role)) {
+        let spec = match Role::of_style(name).and_then(|role| self.sizes.weight(role)) {
             Some(weight) => FontSpec { weight, ..spec },
             None => spec,
+        };
+        // 序号字号与拼音行一样是绝对值：index 走的是通用样式解析，而主题不一定写了 index 样式，
+        // 用绝对值才不依赖主题有没有这个样式。
+        if name == "index" {
+            return text_sizes::overridden(spec, self.sizes.index, None);
         }
+        spec
     }
 
     /// 拼音行的文字样式：主题给的样式上再盖设置里的拼音行字号与字重（绝对字号，不跟候选字缩放）。
@@ -618,6 +624,26 @@ mod tests {
         assert_eq!(sized.with_dark(true).font("candidate").size, 26.0);
         // 不是正数当没填
         assert_eq!(TextSizes::new(-1.0, f32::NAN), TextSizes::default());
+    }
+
+    /// 序号字号是绝对值：填了就盖过主题的 index 字号，行高按同比例（主题行高 × 设置字号 / 主题字号）；
+    /// 主题没写 index 样式时也照样生效（那种情况字号退回回退值再按比例算行高）；不填仍跟候选字缩放。
+    #[test]
+    fn index_font_size_overrides_the_theme_style() {
+        let theme = Theme::light();
+        let base = theme.font("index");
+        assert!(base.size > 0.0, "缺省主题应写了 index 字号");
+        let sized = theme.with_text_sizes(TextSizes {
+            index: Some(30.0),
+            ..TextSizes::default()
+        });
+        let index = sized.font("index");
+        assert_eq!(index.size, 30.0);
+        assert_eq!(index.line_height, base.line_height * 30.0 / base.size);
+        // 没填序号字号时仍跟候选字缩放（现在的行为不变）
+        let scaled = theme.with_text_sizes(TextSizes::new(32.0, 0.0));
+        let candidate = theme.font("candidate");
+        assert_eq!(scaled.font("index").size, base.size * 32.0 / candidate.size);
     }
 
     /// 护眼绿接在青简绿上：只换窗口底色与选中高亮，没改过的变量跟青简绿一模一样。

@@ -68,6 +68,9 @@ pub struct GeneralConfig {
     /// 拼音行（录入框）字号（点），同上。不跟候选字缩放。
     pub input_font_size: FontSize,
 
+    /// 序号字号（点），盖过主题的；0 用主题的。不限范围，不是正数的当 0。只对青简渲染器生效。
+    pub index_font_size: FontSize,
+
     /// 候选字字重（100–900）；0 用主题的。只对青简渲染器生效。
     pub candidate_weight: u16,
 
@@ -202,6 +205,7 @@ impl Default for GeneralConfig {
             candidate_font_size: FontSize::default(),
             annotation_font_size: FontSize::default(),
             input_font_size: FontSize::default(),
+            index_font_size: FontSize::default(),
             candidate_weight: 0,
             annotation_weight: 0,
             input_weight: 0,

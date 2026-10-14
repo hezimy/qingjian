@@ -285,6 +285,15 @@ pub(crate) fn view(settings: &Settings, context: &mut ViewContext<Settings>) -> 
             ),
         ),
         field(
+            "序号字号",
+            "序号（候选列表项编号与页码）的字号，单位是点；清空或填 0 回到主题的字号。",
+            size_box(
+                g.index_font_size,
+                theme.theme_size("index"),
+                context.callback(Message::IndexFontSize),
+            ),
+        ),
+        field(
             "译文字号",
             "单位是点，清空或填 0 回到主题的字号。",
             size_box(
@@ -376,7 +385,7 @@ pub(crate) fn view(settings: &Settings, context: &mut ViewContext<Settings>) -> 
         ),
         field(
             "",
-            "把候选字、译文、拼音行的字号、字重、颜色与候选高亮、窗口底色都清回主题的。",
+            "把候选字、译文、拼音行、序号的字号、字重、颜色与候选高亮、窗口底色都清回主题的。",
             Button::new()
                 .on_click(context.message(Message::ResetFontSizes))
                 .content("恢复主题字号与颜色"),

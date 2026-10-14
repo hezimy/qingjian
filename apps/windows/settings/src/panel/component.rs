@@ -131,6 +131,7 @@ impl Component for Settings {
             Message::CandidateFontSize(size) => self.save_font_size("candidate", size),
             Message::AnnotationFontSize(size) => self.save_font_size("annotation", size),
             Message::InputFontSize(size) => self.save_font_size("input", size),
+            Message::IndexFontSize(size) => self.save_font_size("index", size),
             Message::FontWeight(style, weight) => self.save_font_weight(&style, weight),
             Message::FontColor(style, color) => self.save_font_color(&style, &color),
             Message::FreshWords(on) => self.save("general", "fresh_words", on),
@@ -139,6 +140,7 @@ impl Component for Settings {
                 self.save("general", "candidate_font_size", 0);
                 self.save("general", "annotation_font_size", 0);
                 self.save("general", "input_font_size", 0);
+                self.save("general", "index_font_size", 0);
                 self.save("general", "candidate_weight", 0);
                 self.save("general", "annotation_weight", 0);
                 self.save("general", "input_weight", 0);

@@ -132,12 +132,13 @@ impl Settings {
         }
     }
 
-    /// 字号框（`style` 是 `input` / `candidate` / `annotation`）：清空或填 0 回到主题的，不限范围；
+    /// 字号框（`style` 是 `input` / `candidate` / `annotation` / `index`）：清空或填 0 回到主题的，不限范围；
     /// 没设过时框里显示主题的字号，原样交回不写（见 [`qingjian_platform::FontSize::edited`]）。
     fn save_font_size(&mut self, style: &str, size: Option<f64>) {
         let current = match style {
             "candidate" => self.config.general.candidate_font_size,
             "input" => self.config.general.input_font_size,
+            "index" => self.config.general.index_font_size,
             _ => self.config.general.annotation_font_size,
         };
         let themes = ThemeLibrary::load(qingjian_platform::dirs::themes_dir().as_deref());

@@ -63,8 +63,9 @@
 - **输入状态**（`Frame::mode`）：渲染器只给事实（三个布尔与方案名），显示什么字由主题用 `when` 分支写，渲染器里没有「中 / 英」这类文案。
   mac 壳组装候选帧时填（中英看 Caps Lock，与菜单栏一致；简繁、标点、方案看配置；英文模式标点算半角）；
   Windows 由 Router 现算（与状态条同一来源），经 `CandidateSink::show` 交给 UI 线程，不进 Server ↔ DLL 协议。方案名 `qingjian_platform::scheme_name`：同状态条的 `scheme_label`，单开全拼时也写「全拼」。
-- **设置里的字号**：`[general] candidate_font_size` / `annotation_font_size`（0 用主题的，不限范围）由壳经 `Theme::with_text_sizes` 盖到主题上：
-  `candidate` 与 `annotation` 换成设置的字号，行高同比例；`index`、`preedit` 与表格 `row_height` 按候选字的比例缩放（`theme/text_sizes.rs`）。
+- **设置里的字号**：`[general] candidate_font_size` / `annotation_font_size` / `input_font_size` / `index_font_size`（0 用主题的，不限范围）由壳经 `Theme::with_text_sizes` 盖到主题上：
+  候选字与译文换成设置的字号，行高同比例；拼音行与序号的字号是绝对值（它们的节点引用哪个文字样式由主题定），填了就盖过主题对应样式的字号、行高按字号同比例；
+  没填时 `index`、`preedit` 与表格 `row_height` 按候选字的比例缩放（`theme/text_sizes.rs`）。
   表格行高是下限（`minmax(row_height, auto)`），内容更高时撑开。
   状态条不逐个样式改字号：`render_status` 去掉设置的字号，把整条的倍数乘上候选字的比例，文字、图标、边距、点击边界一起缩放。
 - **状态条**：`status.root` 是一棵与候选窗口同写法的节点树，`repeat` 绑定 `cells` 展开格子，格子组件由主题自己在 `components` 里给（Windows 现在是模式、标点、齿轮三格）。

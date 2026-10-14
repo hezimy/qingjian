@@ -1,4 +1,4 @@
-// 护眼绿：青简绿的护眼版。浅色下候选窗底 #F6F8F5、选中行高亮 #E3ECE4，候选字 17 点、译文 15 点、拼音行 18 点、常规字重；
+// 护眼绿：青简绿的护眼版。浅色下候选窗底 #F6F8F5、选中行高亮 #E3ECE4，候选字 17 点、译文 16.5 点、拼音行 18 点、序号 16 点、常规字重；
 // 候选窗左上角一枝青翠枝叶、右下角一片草地小花做底纹，悬浮状态条左上同样一枝。
 // 悬浮状态条走节点树（`status.root`）且不画投影——没有投影后位图就等于可见的那条，
 // 长按拖动的范围与看到的一致，也能贴着任务栏边上停住。
@@ -16,9 +16,9 @@
   "text": {
     "styles": {
       "candidate": { "size": 17, "line_height": 20, "weight": 400 },
-      "annotation": { "size": 15, "line_height": 19, "weight": 400 },
+      "annotation": { "size": 16.5, "line_height": 21, "weight": 400 },
       "preedit": { "size": 18, "line_height": 21, "weight": 400 },
-      "index": { "size": 12, "line_height": 15, "weight": 400 },
+      "index": { "size": 16, "line_height": 20, "weight": 400 },
       "status": { "size": 13, "line_height": 18 }
     }
   },

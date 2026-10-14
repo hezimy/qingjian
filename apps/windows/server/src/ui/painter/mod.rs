@@ -168,12 +168,13 @@ fn scale(dpi: u32) -> f32 {
     dpi.max(96) as f32 / 96.0
 }
 
-/// 设置里的三处字号、字重与颜色，转成渲染器的文字覆盖。
+/// 设置里的各处字号、字重与颜色，转成渲染器的文字覆盖。
 fn text_sizes(text: &TextStyleSettings) -> TextSizes {
     TextSizes {
         candidate: text.candidate_size.get(),
         annotation: text.annotation_size.get(),
         preedit: text.input_size.get(),
+        index: text.index_size.get(),
         candidate_weight: weight(text.candidate_weight),
         annotation_weight: weight(text.annotation_weight),
         preedit_weight: weight(text.input_weight),
