@@ -274,9 +274,9 @@ impl TextService_Impl {
             }
             Err(error) => {
                 log(&format!("转发按键失败，放行并断开，下一键重连: {error}"));
-                *guard = None;
-                self.last_connect_failure.set(None);
-                self.shared.end_composing();
+                drop(guard);
+                // 断开前先收窗（`disconnect` 内部就是先收窗再清引擎）。
+                self.disconnect();
                 Next::Abort
             }
         })

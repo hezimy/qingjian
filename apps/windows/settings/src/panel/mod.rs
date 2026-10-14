@@ -142,11 +142,12 @@ impl Settings {
         };
         let themes = ThemeLibrary::load(qingjian_platform::dirs::themes_dir().as_deref());
         let theme = themes.resolve(self.config.general.theme_id(), false);
-        // 拼音行的节点在主题里用「译文」样式；没写单独的 preedit 样式时拿它的字号当参考值
-        let theme_size = theme.theme_size(style).or_else(|| {
-            (style == "input")
-                .then(|| theme.theme_size("annotation"))
-                .flatten()
+        // 拼音行优先看主题的「拼音」样式；没写时才退到「译文」样式
+        let theme_size = theme.theme_size(style).or_else(|| match style {
+            "input" => theme
+                .theme_size("preedit")
+                .or_else(|| theme.theme_size("annotation")),
+            _ => None,
         });
         if let Some(size) = current.edited(size.filter(|size| !size.is_nan()), theme_size) {
             self.save("general", &format!("{style}_font_size"), size);

@@ -111,7 +111,16 @@ const BUILTINS: [(&str, &str, EmbeddedFiles); 5] = [
     (
         "eyecare",
         include_str!("../../themes/eyecare/theme.json"),
-        &[],
+        &[
+            (
+                "images/branch.svg",
+                include_bytes!("../../themes/eyecare/images/branch.svg"),
+            ),
+            (
+                "images/meadow.svg",
+                include_bytes!("../../themes/eyecare/images/meadow.svg"),
+            ),
+        ],
     ),
 ];
 
@@ -147,7 +156,7 @@ pub struct Theme {
     /// 设置里的候选窗口底色，盖过主题变量 `surface`。`None` 用主题的。
     surface: Option<Color>,
 
-    /// 生词译词是否用主题的醒目色（`@fresh`）标出。关掉后所有译文都用常态译文色。
+    /// 是否只给生词上主题的醒目色（`@fresh`）。关掉后不分生词熟词，所有译文都用它。
     fresh_words: bool,
 }
 
@@ -253,7 +262,7 @@ impl Theme {
         }
     }
 
-    /// 同一主题换上设置里的「生词用醒目色标出」开关。
+    /// 同一主题换上设置里的「只给生词上醒目色」开关：关掉后不分生词熟词，所有译文都用醒目色。
     pub fn with_fresh_words(&self, fresh_words: bool) -> Self {
         Self {
             fresh_words,
@@ -261,7 +270,7 @@ impl Theme {
         }
     }
 
-    /// 生词译词是否用主题的醒目色（`@fresh`）标出。
+    /// 是否只给生词上主题的醒目色（`@fresh`）；关掉后不分生词熟词，所有译文都用它。
     pub(crate) fn fresh_words(&self) -> bool {
         self.fresh_words
     }
@@ -621,6 +630,8 @@ mod tests {
             Color::rgb(0xe3, 0xec, 0xe4)
         );
         assert_eq!(theme.surface_color(), Color::rgb(0xf6, 0xf8, 0xf5));
+        // 拼音行的字号来自主题的「拼音」样式（青简绿只给了「译文」样式）
+        assert_eq!(theme.theme_size("preedit"), Some(18.0));
         // 青简绿已经还原成原始配色，护眼绿这套浅灰绿只存在于 eyecare
         assert_ne!(
             theme.color(&ColorRef::Variable("accent".to_owned())),
@@ -636,20 +647,23 @@ mod tests {
             Theme::builtin("eyecare", true).unwrap().surface_color(),
             Color::rgb(0x1e, 0x1e, 0x1e)
         );
-        // 状态条：同色调、不画投影（没有投影，位图就等于可见的那一条，拖动范围才跟看到的一致）
+        // 状态条走节点树、不画投影（没有投影，位图就等于可见的那一条，拖动范围才跟看到的一致）
+        use crate::theme::file::ColorSpec;
+        use crate::theme::file::node::{FillSpec, NodeKind};
         let status = &theme.file().status;
+        let root = status.root.as_ref().expect("护眼绿状态条走节点树");
+        let NodeKind::Frame { fill, .. } = &root.kind else {
+            panic!("状态条根节点是框");
+        };
+        let FillSpec::Color(fill) = fill.as_ref().expect("状态条有底色") else {
+            panic!("状态条底色是纯色");
+        };
+        let ColorSpec::Fixed(fill) = fill else {
+            panic!("状态条底色没有条件");
+        };
+        assert_eq!(theme.color(fill), Color::rgb(0xf6, 0xf8, 0xf5));
+        assert!(root.layout.effects.as_deref().unwrap_or(&[]).is_empty());
         assert!(status.effects.is_empty());
-        assert_eq!(
-            theme.color(&status.background),
-            Color::rgb(0xf6, 0xf8, 0xf5)
-        );
-        assert_eq!(theme.color(&status.normal), Color::rgb(0x3a, 0x4b, 0x40));
-        assert_eq!(
-            theme.color(&status.emphasized),
-            Color::rgb(0x3a, 0x4b, 0x40)
-        );
-        assert_eq!(theme.color(&status.gear), Color::rgb(0x3a, 0x4b, 0x40));
-        assert_eq!(theme.color(&status.separator), Color::rgb(0xe3, 0xec, 0xe4));
         // 青简绿自己仍留着投影与灰色格间线
         let base = Theme::light();
         assert!(!base.file().status.effects.is_empty());

@@ -75,6 +75,7 @@ pub fn serve_pipe(
             }
             Ok(Work::Status(event)) => router.handle_status_event(event),
             Ok(Work::Click(target)) => router.handle_click(target),
+            Ok(Work::ConnectionClosed(session)) => router.handle_connection_closed(session),
             Err(RecvTimeoutError::Timeout) => continue,
             Err(RecvTimeoutError::Disconnected) => break,
         }
@@ -169,6 +170,8 @@ fn wait_client(stream: File) -> io::Result<File> {
 /// 服务一条连接：读消息 → 转给工人线程 → 写回，直到对端在帧边界关闭或出错。
 fn serve_connection(mut stream: File, sender: Sender<Work>) {
     let (reply_sender, reply_receiver) = mpsc::channel::<Option<ServerMessage>>();
+    // 这条连接开的会话号（`OpenSession` 里带上来）；断开时用它收掉残留的候选窗。
+    let mut session = None;
     loop {
         let message = match read_message::<_, ClientMessage>(&mut stream) {
             Ok(Some(message)) => message,
@@ -178,6 +181,12 @@ fn serve_connection(mut stream: File, sender: Sender<Work>) {
                 break;
             }
         };
+        if let ClientMessage::OpenSession {
+            session: opened, ..
+        } = &message
+        {
+            session = Some(*opened);
+        }
         if sender
             .send(Work::Client(message, reply_sender.clone()))
             .is_err()
@@ -195,5 +204,10 @@ fn serve_connection(mut stream: File, sender: Sender<Work>) {
         }
     }
     let _ = unsafe { DisconnectNamedPipe(HANDLE(stream.as_raw_handle())) };
+    // 宿主进程退出 / 崩溃时 DLL 根本没机会发 `CloseSession`，它那份候选窗会一直盖在屏幕上。
+    // 替它通知工人线程收窗（只收窗，不删会话——DLL 断线重连用的是同一个会话号）。
+    if let Some(session) = session {
+        let _ = sender.send(Work::ConnectionClosed(session));
+    }
     tracing::debug!("客户端断开");
 }

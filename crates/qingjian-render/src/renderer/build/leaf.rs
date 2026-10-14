@@ -95,12 +95,17 @@ impl Builder<'_> {
                 let mut children = Vec::with_capacity(segments.len());
                 let role = Role::of_style(font.base().unwrap_or("annotation"));
                 for ((segment, tone), sense, alt) in segments {
+                    // 「熟词动态标灰」关掉后就不再把熟词标灰：常态译文色直接换成主题的醒目色
+                    // （`@fresh`），于是整屏译文都是醒目色；开着才熟词回落译文色、只有生词用醒目色。
+                    let usual = if self.theme.fresh_words() {
+                        gloss
+                    } else {
+                        fresh
+                    };
                     let color = match tone {
-                        // 码是词本身的属性，与译文同一个淡色
-                        Tone::Gloss | Tone::Code => gloss,
-                        // 设置里关掉「生词用醒目色标出」时，生词跟普通译词同一个色
-                        Tone::Fresh if self.theme.fresh_words() => fresh,
-                        Tone::Fresh => gloss,
+                        // 码是词本身的属性，与译文同一个色
+                        Tone::Gloss | Tone::Code => usual,
+                        Tone::Fresh => fresh,
                         Tone::Faint => faint,
                         Tone::Pos => pos.as_ref().unwrap_or(faint),
                         Tone::Separator => separator.as_ref().unwrap_or(faint),

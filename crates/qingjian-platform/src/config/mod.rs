@@ -247,7 +247,7 @@ input_color = ""
 # 高亮行上文字的配色仍由主题定，这两项只改底；青简绿的高亮是 #b0ce7d7f、窗口底 #ffffff，护眼绿是 #E3ECE4 / #F6F8F5
 highlight_color = ""
 surface_color = ""
-# 生词译词（看过的轮次还不到 3 轮）用主题的醒目色标出来；false 时所有译文都用常态译文色
+# 生词译词（看过的轮次还不到 3 轮）用主题的醒目色标出来；false 时不分生词熟词，所有译文都用这个醒目色
 fresh_words = true
 # 候选窗口的过渡动画（高亮滑动、主题里的循环动画）；false 时直接跳到位，与系统「减弱动态效果」一样
 animations = true
@@ -401,7 +401,7 @@ enabled = false
 # y = 0
 
 [update]
-# 检查更新：每天向官网（qingjian.app）读一次版本索引，有新版在菜单与设置的「关于」页提示；请求不带任何标识，不自动下载安装
+# 检查更新：每天向项目主页读一次版本索引（本 fork 是 GitHub Release 上的 releases.json），有新版在菜单与设置的「关于」页提示；请求不带任何标识，不自动下载安装
 check = true
 # 渠道：stable 只看正式版；beta 还会提示测试版（alpha / beta / rc）
 channel = "stable"

@@ -32,7 +32,7 @@
       "type": "frame", "when": "preedit|trailing", "padding": [4, 0, 4, 0], "gap": 16,
       "children": [
         { "type": "preedit", "when": "preedit", "font": "annotation",
-          "typed": "@gloss", "rest": "@faint", "struck": "@faint",
+          "typed": "@gloss", "rest": "@faint", "struck": "@fresh",
           "caret": { "width": 1.5, "color": "@text" } },
         { "type": "frame", "when": "trailing", "children": [
           { "type": "icon", "icon": "cloud", "when": "trailing.cloud", "size": 13, "height": 15,

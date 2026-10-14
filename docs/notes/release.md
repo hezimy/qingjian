@@ -1,6 +1,4 @@
-| `.github/workflows/ci.yml` | push main、PR | `core`（Linux）fmt / clippy / 全 workspace 测试（排除 IMK 壳）；`macos` 编 IMK 壳并跑它的测试；`windows` 编 Server / TSF DLL / Settings 并跑测试。仓库公开，Actions 不计费 |
-| `.github/workflows/audit.yml` | 每周一、Cargo.lock 变动 | `cargo audit`（RustSec 已知漏洞） |
-| `.github/dependabot.yml` | 每周一 | Cargo 依赖与钉 commit 的 actions 的更新 PR |# 发版流程
+# 发版流程
 
 2026-09-07 搭起来的：GitHub Actions 按标签打包、建 Release、生成官网下载页用的 `releases.json`。
 这里记怎么发一版、各环节的依赖，以及官网怎么消费产物。
@@ -71,7 +69,7 @@ cargo 命令全 `--locked`（含 `bundle.sh` 与 `build.ps1`）。普通 CI 只�
 
 | 文件 | 触发 | 做什么 |
 |---|---|---|
-| `.github/workflows/ci.yml` | push main、PR | Linux 上 `cargo fmt --check` / clippy / test，排除 `qingjian-macos`（IMK 外壳只能在 macOS 编译，macOS runner 计费是 Linux 的 10 倍） |
+| `.github/workflows/ci.yml` | push main、PR | 三个 job：Linux 跑 fmt / clippy / 全 workspace 测试（排除 `qingjian-macos`）；`macos` 与 `windows` runner 各编各的壳并跑平台测试，平台特有的编译错在 PR 里就暴露 |
 | `.github/workflows/release.yml` | 推 `v*`（三个平台）或 `macos-v*` / `windows-v*` / `linux-v*`（单平台）标签 | `prepare` 门禁并建草稿 Release → `macos` / `windows` / `linux` 并行打包上传 → `publish` 合并摘要、转正、生成 `releases.json`、触发官网构建（见上文） |
 
 ## 产品数据从哪来
@@ -95,7 +93,7 @@ cargo 命令全 `--locked`（含 `bundle.sh` 与 `build.ps1`）。普通 CI 只�
 ## 版本索引的签名
 
 软件内「检查更新」只认签过名的 `releases.json`（设计见 `docs/design/update.md`）。`publish-releases-json.sh` 生成索引后用 `tools/release-sign` 签出 `releases.json.sig`，
-两个文件一起挂到本次 Release 与 GitHub latest；官网构建时原样拷到 `https://qingjian.app/releases.json` 与 `.sig`。
+两个文件一起挂到本次 Release 与 GitHub latest：本 fork 的客户端就读 `https://github.com/hezimy/qingjian/releases/latest/download/releases.json` 与同名 `.sig`（上游另有官网静态站的一份，本 fork 不用）。
 
 - 私钥是仓库 Secret `QINGJIAN_INDEX_SIGNING_KEY`（base64 的 32 字节）；没配时 `release.yml` 的门禁直接失败。维护者本机留一份在 `~/.config/qingjian/index-signing.key`（不进仓库）。
 - 换钥：`cargo run -p qingjian-release-sign -- keygen --out <新文件>`，把打印的公钥加进 `crates/qingjian-update/src/index/signature.rs` 的 `PUBLIC_KEYS`（新旧并列），

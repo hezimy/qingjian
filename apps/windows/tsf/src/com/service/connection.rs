@@ -84,10 +84,11 @@ impl TextService_Impl {
         connected
     }
 
-    /// 转发失败后断开，下一键重连。
+    /// 转发失败后断开，下一键重连。断开前先把候选窗收了：清掉引擎就发不出收窗消息了，
+    /// 那块置顶的窗口会一直盖着别的界面（点它也没用——文档已经失活）。
     pub(super) fn disconnect(&self) {
+        self.shared.end_composing();
         *self.engine.borrow_mut() = None;
         self.last_connect_failure.set(None);
-        self.shared.end_composing();
     }
 }

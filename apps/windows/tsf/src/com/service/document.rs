@@ -34,12 +34,16 @@ impl TextService_Impl {
         }
         let stale = self.shared.take_server_stale();
         if !self.shared.composing() && !stale {
+            // 本地没组句也补发一次收窗：上一次收窗可能因引擎正当被借用 / 连接刚坏而没发出去，
+            // 那块置顶的候选窗就会一直盖着别的界面。收窗是幂等的。
+            self.shared.hide_candidates();
             return;
         }
         let text = {
             let mut guard = self.engine.borrow_mut();
             let Some(client) = guard.as_mut() else {
-                self.shared.reset();
+                drop(guard);
+                self.shared.end_composing();
                 return;
             };
             match client.commit() {
@@ -47,6 +51,7 @@ impl TextService_Impl {
                 Err(error) => {
                     log(&format!("失焦上屏失败，断开，下一键重连: {error}"));
                     drop(guard);
+                    // 先收尾再断开（`disconnect` 里就这么做）：清掉引擎就发不出收窗消息了。
                     self.disconnect();
                     return;
                 }

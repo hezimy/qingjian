@@ -3,8 +3,11 @@ use std::time::Duration;
 use super::{Index, signature};
 use crate::UpdateError;
 
-/// 官网上的版本索引与它的分离签名；`QINGJIAN_UPDATE_INDEX` 可以换成别的地址（测试用，签名照验）。
-const INDEX_URL: &str = "https://qingjian.app/releases.json";
+/// 版本索引与它的分离签名；`QINGJIAN_UPDATE_INDEX` 可以换成别的地址（测试用，签名照验）。
+///
+/// 这个 fork 的索引挂在自己的 GitHub Release 上（`releases.json` 与 `releases.json.sig` 两个附件），
+/// 不经过上游官网：见 `docs/design/update.md`。
+const INDEX_URL: &str = "https://github.com/hezimy/qingjian/releases/latest/download/releases.json";
 
 const MAX_INDEX_BYTES: usize = 2 * 1024 * 1024;
 

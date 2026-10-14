@@ -6,7 +6,7 @@
 ## 主题文件
 
 - 一个主题一个目录：`theme.json`，加上它引用的 `images/…`（PNG、SVG）与 `fonts/…`（TTF / OTF / TTC）。包内路径一律相对 `theme.json`，拒绝 `..` 与绝对路径。
-- 内置主题五个，随 crate 编进来（`crates/qingjian-render/themes/<id>/theme.json`）：`qingjian` 青简绿（缺省）、`eyecare` 护眼绿、`system-blue` 系统蓝、`wechat` 微信绿、`sakura` 樱花；护眼绿、系统蓝、微信绿 `extends` 青简绿、只改颜色变量与字号，樱花整套重写了窗口、组件与状态条（只有浅色）。护眼绿的 `status.effects` 写空、不画投影，所以状态条位图就等于可见的那一条（拖动范围与看到的一致）。
+- 内置主题五个，随 crate 编进来（`crates/qingjian-render/themes/<id>/theme.json`）：`qingjian` 青简绿（缺省）、`eyecare` 护眼绿、`system-blue` 系统蓝、`wechat` 微信绿、`sakura` 樱花；系统蓝、微信绿 `extends` 青简绿、只改颜色变量与字号，樱花整套重写了窗口、组件与状态条（只有浅色）。护眼绿也在青简绿上再加东西：候选窗左上角与右下角两处绝对定位的图片底纹、拼音行的 `preedit` 样式（默认 18 点），状态条改走节点树（`status.root`，见「状态条」）好放左上那枝枝叶底纹；它的 `status.effects` 写空、不画投影，所以状态条位图就等于可见的那一条，长按拖动的范围与看到的一致（没有投影后位图不多出边距，长按拖动的范围能贴着任务栏边上停住）。
   内置主题的图片用 `include_bytes!` 编进程序（`theme/mod.rs` 的 `BUILTINS` 里每个主题一张「路径 → 内容」表，与用户主题走同一套解码），不带字体文件、只用系统字体；测试检查内置主题用到的图片都编进去了。用户主题 `extends` 内置主题时，主题目录里没有的图片到那个内置主题编进程序的文件里找（只看顶层 `extends` 那一层）。
 - 用户主题放在 `<用户数据目录>/themes/<id>/`，由 `ThemeLibrary` 与内置主题合成一个列表（内置在前、用户按 id 排）。目录名必须等于 `meta.id`，不能与内置主题重名，
   不能是 `system` / `light` / `dark`；读不进来的跳过并记警告。设置界面（mac 偏好设置、Windows 设置程序「候选窗口」页）按显示名列出，写回 `[general] theme` 的 id。
@@ -30,7 +30,7 @@
 | `schema` | 格式版本，整数，只在不兼容改动时加一；比渲染器认得的新时记警告、按认得的部分画 |
 | `meta` | `id`、`name`、`author`、`license`；`appearance: "light" \| "dark"` 锁定外观（见下） |
 | `variables` | 颜色变量，`"#rrggbb[aa]"` 或 `{ "light", "dark" }`，节点里用 `@名字` 引用 |
-| `text` | `gamma`（可分深浅）、`family`（缺省字族）、`styles`（命名样式：`size`、`line_height`、`weight`、`family`、`style`） |
+| `text` | `gamma`（可分深浅）、`family`（缺省字族）、`styles`（命名样式：`candidate` 候选词、`annotation` 译词、`preedit` 拼音行、`index` 序号 / 页码，属性 `size`、`line_height`、`weight`、`family`、`style`） |
 | `fonts` | 随主题带的字体文件 `[{ "file": "fonts/x.ttf" }]` |
 | `components` | 可复用的节点，`use` / `repeat` 按名字引用 |
 | `windows` | `vertical` / `horizontal` 两个根节点，按用户选的排布取一个 |
@@ -67,10 +67,10 @@
   `candidate` 与 `annotation` 换成设置的字号，行高同比例；`index`、`preedit` 与表格 `row_height` 按候选字的比例缩放（`theme/text_sizes.rs`）。
   表格行高是下限（`minmax(row_height, auto)`），内容更高时撑开。
   状态条不逐个样式改字号：`render_status` 去掉设置的字号，把整条的倍数乘上候选字的比例，文字、图标、边距、点击边界一起缩放。
-- **状态条**：`status.root` 是一棵与候选窗口同写法的节点树，`repeat` 绑定 `cells` 展开格子（Windows 现在是模式、标点、齿轮三格）。
+- **状态条**：`status.root` 是一棵与候选窗口同写法的节点树，`repeat` 绑定 `cells` 展开格子，格子组件由主题自己在 `components` 里给（Windows 现在是模式、标点、齿轮三格）。
   格子里的条件 `emphasized`（当前模式、生效的全角标点）、`gear`、`first`、`last`，文字绑定 `text`；整条能用 `mode.*`（`Renderer::render_status` 收一份 `Mode`，Windows 的 `StatusView` 带着，与候选窗口同一个 `Router::input_mode`）。
   点击按格：每格第一个产出的节点的右边界（根坐标），没画出来的格同前一格，最后一格延到内容右边；格子之间的装饰算前一格（`renderer/status/tree.rs`）。
-  没写 `root` 走原来的固定排法（内置主题都是），Windows 的状态条快照不变。
+  没写 `root` 走原来的固定排法，只用 `status` 里的颜色与尺寸（青简绿、系统蓝、微信绿、樱花都是；护眼绿写了 `root`）。
 - **表格**：`repeat` 出来的每份组件是一行，组件根节点的子节点依次是各列，每列取各行最宽，行高至少 `row_height`；末尾自动补一列吃掉剩余宽度，
   `span: "row"` 的格子（高亮条）因此能横跨整个表格。列间距用各格的外边距写。竖排三列对齐就靠它。
   一行里的各格（不含 `span`）按各自第一段文字的基线对齐：布局后把基线偏高的格子往下补上边距再排一遍，差不到一像素的不动（`scene/baseline.rs`）；

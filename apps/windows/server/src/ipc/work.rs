@@ -1,6 +1,6 @@
 use std::sync::mpsc::Sender;
 
-use qingjian_platform::protocol::{ClientMessage, ServerMessage};
+use qingjian_platform::protocol::{ClientMessage, ServerMessage, SessionId};
 use qingjian_render::HitTarget;
 
 use crate::dispatch::StatusEvent;
@@ -15,4 +15,7 @@ pub enum Work {
 
     /// UI 线程发来的候选窗口点击。
     Click(HitTarget),
+
+    /// 某条连接断了（宿主进程退出 / 管道出错）：DLL 已经没机会发 `CloseSession` 了。
+    ConnectionClosed(SessionId),
 }

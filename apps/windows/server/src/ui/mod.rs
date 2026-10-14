@@ -177,6 +177,16 @@ fn run(
             window.animation_frame();
             continue;
         }
+        if window.is_watchdog_timer(&msg) {
+            // 切到别的应用后 DLL 未必报得回来（切到没有输入框的应用时一条通知都没有），由 Server 自己
+            // 盯前台：换线程了就把窗口收掉，否则它会一直置顶盖着别人的界面。
+            // 只收窗，**不动服务端缓冲** —— 用户切回来接着打时缓冲还在，不丢已经敲下去的拼音；
+            // 应用那边真终止了组句，下一次按键会由 DLL 的 Commit 把残留清掉。
+            if window.foreground_left() {
+                window.hide();
+            }
+            continue;
+        }
         if msg.message == WM_WAKE {
             // 一次唤醒排空整个队列，保住 Hide→Show 的先后。
             while let Ok(command) = commands.try_recv() {
@@ -220,6 +230,12 @@ fn apply(
                 &settings,
             ));
             Painter::configure(painter, &settings);
+            // 换完画法，屏幕上还挂着的那两个窗口按新设置当场重画：不重画的话位图留着上一套
+            // 颜色（比如刚关掉的熟词动态标灰），在设置里改了看着像没生效
+            window.repaint();
+            if let Some(status) = status {
+                status.repaint();
+            }
         }
     }
 }

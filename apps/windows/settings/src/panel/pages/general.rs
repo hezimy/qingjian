@@ -10,6 +10,7 @@ use crate::panel::controls::{feedback, field, index_of, page, section};
 use crate::panel::{Message, Settings};
 
 /// 学习语言：界面名 + 配置写法。最多同时勾两种；「不显示译文」由下面 `language_boxes` 单独给。
+/// 加「不显示译文」共六项，控件列宽上限 360px，六项横排会被卡片裁掉后三个，故那里分两行、每行三个。
 pub(crate) const LANGUAGES: [(&str, &str); 5] = [
     ("英语", "en"),
     ("日语", "ja"),
@@ -212,7 +213,8 @@ pub(crate) fn view(settings: &Settings, context: &mut ViewContext<Settings>) -> 
     )
 }
 
-/// 学习语言：每种一门勾选框 + 「不显示译文」，横排。最多同时勾两种（勾满后其余置灰）。
+/// 学习语言：每门一个勾选框 + 「不显示译文」。控件列宽上限 360px，六项横排会被卡片裁掉后三个，
+/// 所以分两行、每行三个（行序即 [`LANGUAGES`] 顺序）。最多同时勾两种（勾满后其余置灰）。
 fn language_boxes(settings: &Settings, context: &mut ViewContext<Settings>) -> View {
     let general = &settings.config.general;
     let off = general.learning_language_off();
@@ -224,21 +226,29 @@ fn language_boxes(settings: &Settings, context: &mut ViewContext<Settings>) -> V
         }
     }
     let full = selected.len() >= 2;
-    let boxes = [
-        CheckBox::new()
-            .is_checked(off)
-            .on_is_checked_changed(context.callback(|on| Message::LearningPick("off", on)))
-            .content("不显示译文"),
-        language_box(LANGUAGES[0], &selected, full, context),
-        language_box(LANGUAGES[1], &selected, full, context),
-        language_box(LANGUAGES[2], &selected, full, context),
-        language_box(LANGUAGES[3], &selected, full, context),
-        language_box(LANGUAGES[4], &selected, full, context),
-    ];
-    StackPanel::new()
-        .orientation(Orientation::Horizontal)
-        .spacing(12.0)
-        .children(boxes)
+    let off_box: View = CheckBox::new()
+        .is_checked(off)
+        .on_is_checked_changed(context.callback(|on| Message::LearningPick("off", on)))
+        .content("不显示译文")
+        .into();
+    let row = |boxes: [View; 3]| -> View {
+        StackPanel::new()
+            .orientation(Orientation::Horizontal)
+            .spacing(12.0)
+            .children(boxes)
+    };
+    StackPanel::new().spacing(6.0).children([
+        row([
+            off_box,
+            language_box(LANGUAGES[0], &selected, full, context),
+            language_box(LANGUAGES[1], &selected, full, context),
+        ]),
+        row([
+            language_box(LANGUAGES[2], &selected, full, context),
+            language_box(LANGUAGES[3], &selected, full, context),
+            language_box(LANGUAGES[4], &selected, full, context),
+        ]),
+    ])
 }
 
 /// 一门学习语言的勾选框：已在选中列表里就勾上；已经勾满两种且自己不在此列时置灰。

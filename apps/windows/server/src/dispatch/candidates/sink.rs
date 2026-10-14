@@ -57,7 +57,7 @@ pub struct RenderSettings {
     /// 候选窗口底色（`[general] surface_color`）；空为用主题的。
     pub surface_color: String,
 
-    /// 生词译词是否用主题的醒目色标出（`[general] fresh_words`）。
+    /// 熟词是否标灰（`[general] fresh_words`）：开着只有生词用主题的醒目色，关掉所有译文都用醒目色。
     pub fresh_words: bool,
 
     /// 过渡动画（`[general] animations`）。

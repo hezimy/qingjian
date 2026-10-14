@@ -23,9 +23,9 @@ use windows::Win32::UI::HiDpi::{GetDpiForSystem, GetDpiForWindow};
 use windows::Win32::UI::Input::KeyboardAndMouse::{DragDetect, ReleaseCapture};
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DestroyWindow, GetCursorPos, HTCAPTION, HTCLIENT,
-    HTTRANSPARENT, IDC_HAND, LoadCursorW, MA_NOACTIVATE, SendMessageW, WM_EXITSIZEMOVE,
-    WM_LBUTTONDOWN, WM_MOUSEACTIVATE, WM_NCHITTEST, WM_NCLBUTTONDOWN, WM_TIMER, WNDCLASSEXW,
-    WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_POPUP,
+    HTTRANSPARENT, IDC_HAND, IsWindowVisible, LoadCursorW, MA_NOACTIVATE, SendMessageW,
+    WM_EXITSIZEMOVE, WM_LBUTTONDOWN, WM_MOUSEACTIVATE, WM_NCHITTEST, WM_NCLBUTTONDOWN, WM_TIMER,
+    WNDCLASSEXW, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_POPUP,
 };
 use windows::core::{Error, PCWSTR, Result, w};
 
@@ -139,6 +139,14 @@ impl StatusBar {
 
     pub(super) fn hide(&self) {
         fullscreen::hide(self.hwnd, &self.placement.fullscreen_hidden);
+    }
+
+    /// 设置改了（主题 / 配色 / 字号）：还挂着的状态条按新设置就地重画一遍；没显示过就不画。
+    pub(super) fn repaint(&self) {
+        if self.data.borrow().is_some() && unsafe { IsWindowVisible(self.hwnd) }.as_bool() {
+            self.sync_theme();
+            self.render();
+        }
     }
 
     /// DPI 或深浅变了就重建主题。DPI 优先取所在位置显示器的，理由同候选窗口（#146）。

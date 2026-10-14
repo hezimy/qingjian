@@ -173,8 +173,9 @@ fn theme_font(theme: &Theme) -> String {
 /// 三个字重下拉共用的说明。
 const WEIGHT_HINT: &str = "下拉里只列这台机器上真有的档位（候选字与译文主要是汉字，档位由中文字体定）；「跟随主题」用主题写的字重。";
 
-/// 「生词标色」的说明。
-const FRESH_HINT: &str = "看过的轮次还不到 3 轮的译词算生词，主题会把它标成醒目色（青简绿、护眼绿是橙 #FF8D28）；看熟了自动回落常态译文色。关掉后所有译文都用上面的译文颜色，一屏颜色统一。";
+/// 「熟词动态标灰」的说明。名字就是这个开关做的事：**开着才标灰**，关掉就不标灰、一屏全用醒目色。
+/// 名字与行为方向必须一致——叫「生词标色」时老是让人以为开着才上色（见 issue）。
+const FRESH_HINT: &str = "看过的轮次还不到 3 轮的译词算生词，看过 3 轮以上算熟词。开着：熟词用译文颜色（灰），生词用主题的醒目色（青简绿、护眼绿是橙 #FF8D28）；关掉：熟词不标灰，所有译文都用这个醒目色，一屏全标出来。";
 
 /// 「渲染引擎」的说明：切到系统绘制时，把哪些设置从此不生效一次说清。
 const RENDERER_HINT: [&str; 2] = [
@@ -300,7 +301,7 @@ pub(crate) fn view(settings: &Settings, context: &mut ViewContext<Settings>) -> 
         field(
             "译文颜色",
             &format!(
-                "填 #RRGGBB；空用{}。填了以后上面的「生词标色」也一并被盖掉。",
+                "填 #RRGGBB；空用{}。填了以后上面的「熟词动态标灰」也一并被盖掉。",
                 theme_color(theme.variable_color("gloss"))
             ),
             color_box(
@@ -311,7 +312,7 @@ pub(crate) fn view(settings: &Settings, context: &mut ViewContext<Settings>) -> 
             ),
         ),
         field(
-            "生词标色",
+            "熟词动态标灰",
             FRESH_HINT,
             ToggleSwitch::new()
                 .is_on(g.fresh_words)
@@ -324,6 +325,7 @@ pub(crate) fn view(settings: &Settings, context: &mut ViewContext<Settings>) -> 
                 g.input_font_size,
                 theme
                     .theme_size("input")
+                    .or_else(|| theme.theme_size("preedit"))
                     .or_else(|| theme.theme_size("annotation")),
                 context.callback(Message::InputFontSize),
             ),

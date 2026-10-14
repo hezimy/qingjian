@@ -189,14 +189,18 @@ impl TextService_Impl {
     /// （`ITfKeyEventSink::OnSetFocus` 在切窗口时不触发），不然候选窗会一直置顶盖着别的界面，
     /// 点它也因为宿主文档已经失活而上不了屏。
     pub(super) fn set_thread_focus(&self, foreground: bool) {
-        if self.shared.foreground() == foreground {
-            return;
-        }
+        let was = self.shared.foreground();
         self.shared.set_foreground(foreground);
         if foreground {
+            // 已经在前台就别重复补连 / 同步（切窗口时这条通知会来好几遍）。
+            if was {
+                return;
+            }
             self.ensure_connected();
             self.sync_mode_from_server();
         } else {
+            // 失焦动作幂等，不做「状态没变就跳过」：进程启动时没收到过「得到焦点」的话标记一直是
+            // false，守卫会把这次失焦整个吞掉 —— 候选窗就一直盖着别的界面，点它也因为文档失活而没反应。
             self.commit_pending();
         }
     }

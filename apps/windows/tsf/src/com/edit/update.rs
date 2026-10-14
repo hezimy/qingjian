@@ -51,7 +51,10 @@ impl ITfEditSession_Impl for UpdateSession_Impl {
         match result {
             Ok(Ok(())) => Ok(()),
             Ok(Err(error)) => {
-                log(&format!("组句更新失败: {error}"));
+                log(&format!("组句更新失败，收尾并收窗: {error}"));
+                // 写失败多半是文档上下文已失效（应用终止了文档 / 切了窗口）：本地收尾并让 Server
+                // 收窗。留着「在组句」的话轮询会一直刷那块位图，窗口永不消失。
+                self.shared.end_composing();
                 Err(error)
             }
             Err(_) => {

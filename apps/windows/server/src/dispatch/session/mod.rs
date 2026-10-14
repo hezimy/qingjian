@@ -2,6 +2,9 @@
 
 mod info;
 
+#[cfg(test)]
+mod tests;
+
 use qingjian_platform::protocol::SessionId;
 
 pub(super) use self::info::SessionInfo;
@@ -57,6 +60,18 @@ impl Router {
             .then(|| self.engine.take_raw());
         self.reset_composition();
         text
+    }
+
+    /// 一条连接断了（宿主进程退出 / 管道出错），DLL 已经发不出 `CloseSession` 了。
+    ///
+    /// 只把组句与候选窗收掉，**不删会话**：DLL 断线重连会复用同一个会话号，在这里删掉会把
+    /// 刚重连上的那条连接一起误伤（会话本来也会在下一次 `OpenSession` 时被覆盖）。
+    /// `pub(crate)`：调用方 [`crate::ipc::pipe`] 不在 `dispatch` 子树里。
+    pub(crate) fn handle_connection_closed(&mut self, session: SessionId) {
+        if self.focused == Some(session) {
+            tracing::debug!(?session, "连接断开，收起候选窗");
+            self.reset_composition();
+        }
     }
 
     /// 清掉组句、展示状态、在飞的云联想与翻译评审，收起候选窗口。

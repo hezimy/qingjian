@@ -148,8 +148,10 @@ fn poll_once(context: &PollContext) {
         }
         Err(error) => {
             log(&format!("云联想轮询失败，断开，下一键重连: {error}"));
-            *guard = None;
+            drop(guard);
+            // 先收尾（本地清 + 发收窗）再清引擎：清掉引擎就发不出收窗消息了。
             context.shared.end_composing();
+            *context.engine.borrow_mut() = None;
         }
     }
 }
@@ -176,7 +178,10 @@ fn commit_clicked(context: &PollContext, frame: &Frame, commit: String) {
         Some(commit),
         preedit,
     ) {
-        log(&format!("点击上屏的编辑会话没被受理: {error}"));
+        log(&format!("点击上屏的编辑会话没被受理，收尾并收窗: {error}"));
+        // 文档上下文多半已失效（切窗口后 TSF 直接拒会话）。不收尾的话本地仍是「在组句」，
+        // 那 80 ms 的轮询会继续刷这块窗口 —— 它就永远盖着，点它也因为文档已失活而没反应。
+        context.shared.end_composing();
     }
 }
 

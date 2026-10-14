@@ -15,5 +15,5 @@ pub use index::{Asset, Index, PUBLIC_KEYS, Release, SCHEMA_VERSION, verify};
 pub use target::Target;
 pub use version::Version;
 
-/// 下载页，提示里点开的就是它。
-pub const DOWNLOAD_URL: &str = "https://qingjian.app/download";
+/// 下载页，提示里点开的就是它：本 fork 的 GitHub Release 列表。
+pub const DOWNLOAD_URL: &str = "https://github.com/hezimy/qingjian/releases/latest";

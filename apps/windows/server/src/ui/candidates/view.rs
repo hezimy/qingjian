@@ -131,7 +131,9 @@ fn draw_top_line(hdc: HDC, data: &RenderData, y: i32) -> i32 {
         let (color, strike, underline) = match kind {
             PreeditKind::Typed => (theme.preedit_color, false, false),
             PreeditKind::Rest => (theme.pos_color, false, false),
-            PreeditKind::Corrected => (theme.pos_color, true, false),
+            // 敲错 / 已被纠错的拼音段用主题的醒目色（与青简渲染器的 `struck` 一致）：原来用 pos_color
+            // 那一档浅灰，浅色底上几乎看不见，用户要的是「错的也要标出来」
+            PreeditKind::Corrected => (theme.fresh_color, true, false),
             // 辅码码段：与剩余拼音同一个淡色，再压一道下划线把它们区分开
             PreeditKind::AuxCode => (theme.pos_color, false, true),
         };
@@ -144,7 +146,8 @@ fn draw_top_line(hdc: HDC, data: &RenderData, y: i32) -> i32 {
                 right: x + width,
                 bottom: top + height / 2 + weight,
             };
-            fill_rect(hdc, line, theme.pos_color);
+            // 删除线跟着文字色：渲染器那边（cosmic-text）也是同色
+            fill_rect(hdc, line, color);
         }
         if underline {
             let line = RECT {
@@ -455,13 +458,17 @@ fn draw_word(hdc: HDC, theme: &Theme, row: &Row, x: i32, baseline: i32, small_of
 }
 
 fn tone_color(theme: &Theme, tone: Tone) -> COLORREF {
+    // 关掉「熟词动态标灰」时熟词不再标灰，译文一律用主题的醒目色
+    let usual = if theme.fresh_words {
+        theme.gloss_color
+    } else {
+        theme.fresh_color
+    };
     match tone {
-        Tone::Gloss => theme.gloss_color,
-        // 设置里关掉「生词用醒目色标出」时，生词跟普通译词同一个色
-        Tone::Fresh if theme.fresh_words => theme.fresh_color,
-        Tone::Fresh => theme.gloss_color,
+        Tone::Gloss => usual,
+        Tone::Fresh => theme.fresh_color,
         Tone::Faint | Tone::Pos | Tone::Separator => theme.pos_color,
-        Tone::Code => theme.gloss_color,
+        Tone::Code => usual,
     }
 }
 

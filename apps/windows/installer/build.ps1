@@ -107,13 +107,17 @@ if ($Version.EndsWith('-dev')) {
 $VersionNumeric = $Version -replace '-.*$', ''
 Write-Host "版本 $Version" -ForegroundColor Cyan
 
-# 3) 找 ISCC.exe：先 Program Files 里的 7（与开发机同版本；CI 镜像 PATH 上自带 Chocolatey 的 6，不带简中翻译，不能让它抢先），
-#    再 PATH，最后 6。QINGJIAN_ISCC 环境变量可直接指定。
+# 3) 找 ISCC.exe：先 7（与开发机 / CI 同版本，见 docs\notes\release.md；CI 镜像 PATH 上自带 Chocolatey 的 6，
+#    不带简中翻译，不能让它抢先），再 PATH，最后 6。QINGJIAN_ISCC 环境变量可直接指定。
+#    7 有三个常见落点：管理员装进 Program Files（含 x86 那份）、**按当前用户装进 %LOCALAPPDATA%\Programs**
+#    （winget 与安装器的用户级默认）。漏掉最后一个会让"明明装了 7"的机器退到 6——而 6.2 认不出
+#    `ArchitecturesAllowed=x64compatible`（6.3 才有）会直接编译失败。
 $iscc = $env:QINGJIAN_ISCC
 if (-not $iscc) {
     $candidates = @(
         "${env:ProgramFiles}\Inno Setup 7\ISCC.exe",
-        "${env:ProgramFiles(x86)}\Inno Setup 7\ISCC.exe"
+        "${env:ProgramFiles(x86)}\Inno Setup 7\ISCC.exe",
+        "${env:LOCALAPPDATA}\Programs\Inno Setup 7\ISCC.exe"
     )
     $iscc = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
 }

@@ -1,5 +1,7 @@
-// 护眼绿：青简绿的护眼版。浅色下候选窗底 #F6F8F5、选中行高亮 #E3ECE4，候选字 17 点、译文 15 点、常规字重；
-// 悬浮状态条同色调（#F6F8F5 底、#3A4B40 字与齿轮、#E3ECE4 格间细线）且不画投影。
+// 护眼绿：青简绿的护眼版。浅色下候选窗底 #F6F8F5、选中行高亮 #E3ECE4，候选字 17 点、译文 15 点、拼音行 18 点、常规字重；
+// 候选窗左上角一枝青翠枝叶、右下角一片草地小花做底纹，悬浮状态条左上同样一枝。
+// 悬浮状态条走节点树（`status.root`）且不画投影——没有投影后位图就等于可见的那条，
+// 长按拖动的范围与看到的一致，也能贴着任务栏边上停住。
 // 其余配色与结构都继承青简绿——青简绿改了窗口布局、装饰或深色配色，这里跟着一起变。
 {
   "extends": "qingjian",
@@ -15,18 +17,105 @@
     "styles": {
       "candidate": { "size": 17, "line_height": 20, "weight": 400 },
       "annotation": { "size": 15, "line_height": 19, "weight": 400 },
-      "index": { "size": 12, "line_height": 15, "weight": 400 }
+      "preedit": { "size": 18, "line_height": 21, "weight": 400 },
+      "index": { "size": 12, "line_height": 15, "weight": 400 },
+      "status": { "size": 13, "line_height": 18 }
     }
   },
 
-  // 悬浮状态条：同色调、不画投影。没有投影后位图就等于可见的那条，
-  // 长按拖动的范围与看到的一致，也能贴着任务栏边上停住。
+  "components": {
+    // 拼音行 18 点：认 preedit 样式（青简绿的 top_line 用的是「译文」样式，这里换掉整段）
+    "top_line": {
+      "type": "frame", "when": "preedit|trailing", "padding": [4, 0, 4, 0], "gap": 16,
+      "children": [
+        { "type": "preedit", "when": "preedit", "font": "preedit",
+          "typed": "@gloss", "rest": "@faint", "struck": "@fresh",
+          "caret": { "width": 1.5, "color": "@text" } },
+        { "type": "frame", "when": "trailing", "children": [
+          { "type": "icon", "icon": "cloud", "when": "trailing.cloud", "size": 13, "height": 15,
+            "color": "@cloud", "margin": [0, 4, 0, 0] },
+          { "type": "text", "bind": "trailing.text", "when": "trailing.cloud", "font": "annotation", "color": "@cloud" },
+          { "type": "text", "bind": "trailing.text", "when": "!trailing.cloud", "font": "annotation", "color": "@gloss" }
+        ] }
+      ]
+    },
+
+    // 悬浮状态条的一格：第一格中/英、文字格、齿轮格
+    "eyecare-status-cell": {
+      "type": "frame", "padding": [4, 6, 4, 6],
+      "children": [
+        { "type": "frame", "when": "first", "children": [
+          { "type": "text", "text": "中", "when": "!mode.english", "font": "status", "color": "#3A4B40" },
+          { "type": "text", "text": "英", "when": "mode.english", "font": "status", "color": "#3A4B40" }
+        ] },
+        { "type": "frame", "when": "!first", "children": [
+          { "type": "text", "bind": "text", "when": "!gear", "font": "status",
+            "color": { "if": "emphasized", "then": "#3A4B40", "else": "#3A4B40" } }
+        ] },
+        { "type": "frame", "when": "gear", "children": [
+          { "type": "icon", "icon": "gear", "size": 13, "color": "#3A4B40" }
+        ] }
+      ]
+    }
+  },
+
+  "windows": {
+    // 左上枝叶、右下草地是绝对定位的底纹，放在 children 最前、画在内容之下，压低透明度免得抢字；
+    // 内边距把装饰让开（左侧 30 给枝叶，上/下各留 10）
+    "horizontal": {
+      "padding": [10, 16, 10, 30],
+      "children": [
+        { "type": "frame", "position": "absolute", "inset": [-12, "auto", "auto", -12], "width": 40, "height": 40,
+          "opacity": 0.5, "fill": { "image": "images/branch.svg" } },
+        { "type": "frame", "position": "absolute", "inset": ["auto", -10, -10, "auto"], "width": 56, "height": 34,
+          "opacity": 0.5, "fill": { "image": "images/meadow.svg" } },
+        { "type": "use", "component": "top_line" },
+        { "type": "frame", "when": "candidates", "align_self": "stretch", "padding": [0, 5, 0, 5], "gap": 8,
+          "children": [
+            { "type": "repeat", "bind": "candidates", "component": "item" },
+            { "type": "frame", "when": "page", "margin": [0, -5, 0, "auto"], "padding": [0, 0, 0, 5], "children": [
+              { "type": "text", "bind": "page", "font": "index", "color": "@faint", "margin": [8, 0, 0, 0] }
+            ] }
+          ] },
+        { "type": "annotation", "bind": "highlighted.annotation", "when": "highlighted.annotation",
+          "font": "annotation", "gloss": "@gloss", "fresh": "@fresh", "faint": "@faint",
+          "margin": [2, -5, 0, 5], "padding": [0, 0, 2, 0] }
+      ]
+    },
+    "vertical": {
+      "padding": [10, 16, 10, 30],
+      "children": [
+        { "type": "frame", "position": "absolute", "inset": [-12, "auto", "auto", -12], "width": 40, "height": 40,
+          "opacity": 0.5, "fill": { "image": "images/branch.svg" } },
+        { "type": "frame", "position": "absolute", "inset": ["auto", -10, -10, "auto"], "width": 56, "height": 34,
+          "opacity": 0.5, "fill": { "image": "images/meadow.svg" } },
+        { "type": "use", "component": "top_line" },
+        { "type": "frame", "when": "candidates", "table": { "row_height": 27 }, "align_self": "stretch",
+          "children": [{ "type": "repeat", "bind": "candidates", "component": "row" }] },
+        { "type": "text", "bind": "page", "font": "index", "color": "@faint",
+          "align_self": "end", "margin": [4, 0, 0, 0] }
+      ]
+    }
+  },
+
+  // 状态条走节点树（要加左上枝叶底纹）：底色 #F6F8F5、不画投影；格子由 eyecare-status-cell 给。
+  // 固定排法那几个字段留着不改值（节点树不读它们，但配置与文档仍引用）。
   "status": {
     "background": "#F6F8F5",
     "normal": "#3A4B40",
     "emphasized": "#3A4B40",
     "gear": "#3A4B40",
     "separator": "#E3ECE4",
-    "effects": []
+    "effects": [],
+    "root": {
+      "type": "frame", "padding": [3, 8, 3, 20], "radius": 13,
+      "fill": "#F6F8F5",
+      "effects": [],
+      "children": [
+        { "type": "frame", "position": "absolute", "inset": [-9, "auto", "auto", -9], "width": 26, "height": 26,
+          "opacity": 0.5, "fill": { "image": "images/branch.svg" } },
+        { "type": "repeat", "bind": "cells", "component": "eyecare-status-cell" }
+      ]
+    }
   }
 }

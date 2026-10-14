@@ -1,6 +1,10 @@
 //! 候选窗口：不抢焦点、置顶的分层窗口，跟随光标，画拼音行与候选列表，四周柔和阴影。
 //! 缺省交给青简渲染器出位图再贴（[`super::painter`]），配置 `renderer = "system"` 时走 GDI：绘制在 [`view`]，
 //! 配色 / 字体在 [`theme`]。绘制内容在 [`RenderData`]，一行的展示形态在 [`row`]。设计语言对齐 macOS 端。
+//!
+//! 窗口显示期间还挂着一条**前台看门狗**（[`CandidateWindow::watch`]）：切到别的应用时 DLL 未必报得回来
+//! （切成一个没有输入框的应用，那条焦点通知根本不来），窗口就会一直置顶盖着别人的界面。这条定时器由
+//! Server 自己盯前台窗口，换线程了就地收窗，不指望 DLL 说话。
 
 mod click;
 mod render_data;
@@ -13,12 +17,13 @@ use std::rc::Rc;
 
 use windows::Win32::Foundation::{E_INVALIDARG, HWND, LPARAM, LRESULT, POINT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::{GetDC, ReleaseDC};
+use windows::Win32::System::Threading::GetCurrentThreadId;
 use windows::Win32::UI::HiDpi::{GetDpiForSystem, GetDpiForWindow};
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, DestroyWindow, IDC_ARROW, KillTimer, LoadCursorW, MSG,
-    SW_HIDE, SW_SHOWNA, SetTimer, ShowWindow, WM_LBUTTONDOWN, WM_MOUSEACTIVATE, WM_NCHITTEST,
-    WM_TIMER, WNDCLASSEXW, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST,
-    WS_POPUP,
+    CreateWindowExW, DefWindowProcW, DestroyWindow, GetForegroundWindow, GetWindowThreadProcessId,
+    IDC_ARROW, IsWindowVisible, KillTimer, LoadCursorW, MSG, SW_HIDE, SW_SHOWNA, SetTimer,
+    ShowWindow, WM_LBUTTONDOWN, WM_MOUSEACTIVATE, WM_NCHITTEST, WM_TIMER, WNDCLASSEXW,
+    WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_POPUP,
 };
 use windows::core::{Error, PCWSTR, Result, w};
 
@@ -40,6 +45,12 @@ static CLASS: WindowClass = WindowClass::new();
 /// 动画定时器的 id（间隔按渲染器给的 `next_frame`；系统定时器精度约 15.6 ms）。
 const ANIMATION_TIMER: usize = 1;
 
+/// 前台看门狗定时器的 id（见文件头）。同一个窗口上的第二个定时器。
+const WATCHDOG_TIMER: usize = 2;
+
+/// 看门狗的间隔（毫秒）：切窗口后最多这么久窗口就收掉。够快看不出残留，也不至于白费 CPU。
+const WATCHDOG_INTERVAL: u32 = 250;
+
 /// 光标行与候选窗之间的间隙（逻辑像素）。
 const CARET_GAP: i32 = 2;
 
@@ -58,6 +69,19 @@ fn system_prefers_dark() -> bool {
         .open(r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize")
         .and_then(|key| key.get_u32("AppsUseLightTheme"))
         .is_ok_and(|value| value == 0)
+}
+
+/// 前台窗口所在线程；没有前台窗口（切桌面 / 安全桌面）或问不出来时 `None`。
+///
+/// 看门狗比的是**线程**而不是窗口句柄：同一个应用弹出个下拉、菜单、工具提示，窗口句柄换了但线程没换，
+/// 不该把候选窗收掉；换应用一般就是换线程（换进程）。
+fn foreground_thread() -> Option<u32> {
+    let window = unsafe { GetForegroundWindow() };
+    if window.is_invalid() {
+        return None;
+    }
+    let thread = unsafe { GetWindowThreadProcessId(window, None) };
+    (thread != 0).then_some(thread)
 }
 
 /// 候选窗口。内容经 `UpdateLayeredWindow` 一次贴上，窗口过程只走默认处理。
@@ -81,6 +105,13 @@ pub(crate) struct CandidateWindow {
 
     /// 最近一次贴图时窗口左上角的屏幕坐标；动画帧贴在同一处。
     position: Cell<(i32, i32)>,
+
+    /// 最近一次 `show` 用的光标矩形；设置改了要按新主题就地重画时用它。
+    anchor: Cell<Option<RECT>>,
+
+    /// 显示那一刻前台窗口所在线程（= 正在打字的那个应用）。前台换线程了就收窗，见 [`Self::foreground_left`]。
+    /// `None` 表示归属判不出来（当时前台是本进程），看门狗不生效。
+    owner: Cell<Option<u32>>,
 }
 
 impl CandidateWindow {
@@ -122,6 +153,8 @@ impl CandidateWindow {
             logged_dpi: Cell::new(None),
             painter,
             position: Cell::new((0, 0)),
+            anchor: Cell::new(None),
+            owner: Cell::new(None),
         })
     }
 
@@ -130,8 +163,21 @@ impl CandidateWindow {
         self.data.borrow_mut().set(frame, mode);
     }
 
+    /// 设置改了（主题 / 配色 / 字号）：还显示着的候选窗按新设置就地重画一遍。
+    /// 不重画的话屏幕上那块位图还留着上一套颜色，在设置里勾了开关像是没生效。
+    pub(crate) fn repaint(&self) {
+        let Some(anchor) = self.anchor.get() else {
+            return;
+        };
+        if unsafe { IsWindowVisible(self.hwnd) }.as_bool() {
+            self.show(anchor);
+        }
+    }
+
     /// 按光标矩形定位并显示：贴光标下方（放不下放上方），四周留出阴影。
     pub(crate) fn show(&self, anchor: RECT) {
+        let was_visible = unsafe { IsWindowVisible(self.hwnd) }.as_bool();
+        self.anchor.set(Some(anchor));
         self.sync_theme(anchor);
         let rendered = {
             let data = self.data.borrow();
@@ -175,6 +221,15 @@ impl CandidateWindow {
         };
         if updated.is_ok() {
             let _ = unsafe { ShowWindow(self.hwnd, SW_SHOWNA) };
+            // 刚显示出来：记下前台是哪个线程（正在打字的应用），并起看门狗。
+            // 已经显示着的那次（设置改了就地重画）不动记录，免得把归属记成本进程。
+            if !was_visible {
+                self.owner.set(foreground_thread().filter(|thread| {
+                    // 前台是本进程（设置程序 / 状态条）时判不出归属，宁可不设看门狗
+                    *thread != unsafe { GetCurrentThreadId() }
+                }));
+            }
+            self.watch();
         } else {
             self.hide();
         }
@@ -208,6 +263,7 @@ impl CandidateWindow {
         let _ = unsafe { ShowWindow(self.hwnd, SW_HIDE) };
         click::set_hits(Vec::new(), (0, 0));
         self.stop_animation();
+        self.stop_watch();
         if let Some(painter) = self.painter.borrow_mut().as_mut() {
             painter.forget();
         }
@@ -216,6 +272,39 @@ impl CandidateWindow {
     /// 这条消息是候选窗的动画定时器。
     pub(crate) fn is_animation_timer(&self, msg: &MSG) -> bool {
         msg.message == WM_TIMER && msg.hwnd == self.hwnd && msg.wParam.0 == ANIMATION_TIMER
+    }
+
+    /// 这条消息是候选窗的前台看门狗。
+    pub(crate) fn is_watchdog_timer(&self, msg: &MSG) -> bool {
+        msg.message == WM_TIMER && msg.hwnd == self.hwnd && msg.wParam.0 == WATCHDOG_TIMER
+    }
+
+    /// 前台已经换到别的线程（切到别的应用 / 弹出别的窗口）了，候选窗该收。
+    ///
+    /// 为什么不能只靠 DLL：切到一个**没有输入框**的应用时，那条「本线程失去焦点」的通知未必会来
+    /// （被切走的那个线程有没有焦点事件，取决于 TSF 怎么派），DLL 不说话，窗口就一直置顶盖着 ——
+    /// 用户只能看着它，拖不动也关不掉。这条兜底由 Server 自己盯前台窗口。
+    pub(crate) fn foreground_left(&self) -> bool {
+        let Some(owner) = self.owner.get() else {
+            // 归属没记下（显示时前台就是本进程）：看门狗不生效，交回 DLL 那套
+            return false;
+        };
+        match foreground_thread() {
+            Some(thread) => thread != owner,
+            // 前台窗口拿不到（切桌面、安全桌面）：当作已经离开
+            None => true,
+        }
+    }
+
+    /// 起 / 续前台看门狗。同一个 id 再 `SetTimer` 只会改间隔，已开着时是无害的空操作。
+    fn watch(&self) {
+        unsafe { SetTimer(Some(self.hwnd), WATCHDOG_TIMER, WATCHDOG_INTERVAL, None) };
+    }
+
+    fn stop_watch(&self) {
+        // SAFETY: 没在跳时 KillTimer 返回错误，忽略
+        let _ = unsafe { KillTimer(Some(self.hwnd), WATCHDOG_TIMER) };
+        self.owner.set(None);
     }
 
     /// 定时器每跳：要动画的下一帧贴在原处；播完就停。

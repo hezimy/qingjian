@@ -1,7 +1,7 @@
 use qingjian_platform::protocol::KeyModifiers;
 use qingjian_platform::{
-    Appearance, AppsConfig, CandidateRenderer, Config, FontSize, HighlightKeys, KeyCombo,
-    LayoutMode, PageKeys, PreeditMode, Scheme, SwitchKeys,
+    Appearance, AppsConfig, CandidateRenderer, Config, HighlightKeys, KeyCombo, LayoutMode,
+    PageKeys, PreeditMode, Scheme, SwitchKeys,
 };
 
 use super::{RenderSettings, TextStyleSettings};

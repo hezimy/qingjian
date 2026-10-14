@@ -78,10 +78,10 @@ impl Router {
                 None
             }
             ClientMessage::HideCandidates { session } => {
-                // 组句在 DLL 侧结束（应用终止组句 / 翻译评审失焦）：只收窗口；缓冲留给下一键的 Commit 清。
+                // 组句在 DLL 侧结束（应用终止组句 / 翻译评审失焦）：连缓冲一起清掉并收窗口。
+                // 只收窗不清缓冲的话，这个会话不再发键时那段拼音就永远留在 Server 里。
                 if self.focused == Some(session) {
-                    self.end_translation();
-                    self.hide_candidate_window();
+                    self.reset_composition();
                 }
                 None
             }
