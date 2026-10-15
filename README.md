@@ -12,9 +12,9 @@
 
 * 仅针对Windows平台。
 
-<img width="535" height="397" alt="image" src="https://github.com/user-attachments/assets/b72fa93d-5ad6-4b21-9132-f12144cb4ff7" />
+<img width="504" height="545" alt="image" src="https://github.com/user-attachments/assets/13d8bab6-b329-47c3-8e26-c92717f969c9" />
 
 
 
 
-青简在[官方渠道](https://qingjian.app/download)免费提供。代码采用 [GPL-3.0-or-later](LICENSE) 许可；项目名称与 logo 不包含在代码授权中。随包数据有各自的来源与许可，见[数据来源清单](docs/design/landscape.md)。
+青简在[官方渠道](https://qingjian.app/download)免费提供。代码采用 [GPL-3.0-or-later](LICENSE) 许可；项目名称与 logo 不包含在代码授权中。随包数据有各自的来源与许可，见[数据来源清单](docs/design/landscape.md)。huyan
