@@ -3,15 +3,23 @@
 //! 微信 4.x 对「非空范围」的 GetTextExt 只回终点处 1 像素残片（首键却给整行高，实测
 //! (…,1062,…,1082) 对 (…,1063,…,1064)），锚点因此逐键跳、贴下方还盖住输入行——组句
 //! 一律折叠到起点再量（对齐 weasel），残片按上次的正常行高补回整行。
+//!
+//! WPS 文字（wps.exe）对组句范围**每个键**都报窗口右下角逐个像素（实测整个会话
+//! (2559,1399,2560,1399) 一动不动，候选窗因此死在屏幕右下角），`GetSelection` 也是空的、
+//! 连选区都没得量。这种值在 [`stabilize`] 里一律不采用，退到次锚点——系统光标
+//! （[`system_caret_rect`]，跟着真光标走），再不行才是鼠标。
 
 use std::mem::ManuallyDrop;
 use std::sync::atomic::{AtomicI32, Ordering};
 
 use windows::Win32::Foundation::{HWND, POINT, RECT};
+use windows::Win32::Graphics::Gdi::MapWindowPoints;
 use windows::Win32::UI::TextServices::{
     ITfContext, ITfRange, TF_ANCHOR_START, TF_DEFAULT_SELECTION, TF_SELECTION,
 };
-use windows::Win32::UI::WindowsAndMessaging::{GetCursorPos, GetForegroundWindow, GetWindowRect};
+use windows::Win32::UI::WindowsAndMessaging::{
+    GetCursorPos, GetForegroundWindow, GetGUIThreadInfo, GetWindowRect, GUITHREADINFO,
+};
 use windows::core::BOOL;
 
 use qingjian_platform::protocol::ScreenRect;
@@ -49,12 +57,59 @@ fn collapsed_rect(context: &ITfContext, ec: u32, range: &ITfRange) -> Option<REC
 }
 
 /// 插入点（没有选区时是光标，有选区时是选区）的屏幕矩形。「只在候选窗口」模式应用里不放 marked text，
-/// 没有组句范围可量，就用它给候选窗口定位。
+/// 没有组句范围可量，就用它给候选窗口定位。WPS 的 `GetSelection` 返回空，退到系统光标（见下）。
 pub(crate) fn caret_rect(context: &ITfContext, ec: u32) -> ScreenRect {
     match selection_range(context, ec) {
         Some(range) => anchor_rect(context, ec, &range),
-        None => mouse_screen_rect(),
+        None => match system_caret_rect() {
+            Some(rect) => {
+                crate::com::log::log(&format!(
+                    "候选锚点 次选=系统光标 rect=({},{},{},{})",
+                    rect.left, rect.top, rect.right, rect.bottom
+                ));
+                rect
+            }
+            None => mouse_screen_rect(),
+        },
     }
+}
+
+/// 系统光标（`GetGUIThreadInfo` 的 `rcCaret`）的屏幕矩形：TSF 选区量不到时的真光标位置。
+/// 线程 id 传 0 就是「前台窗口所在的线程」（Old New Thing 同款用法），省得自己取。
+/// 宿主自绘光标（不 `CreateCaret`）或跨权限（前台是提权窗口）拿不到时是空矩形 / 调用失败，返回 `None`。
+///
+/// `rcCaret` 是 `hwndCaret` 的**客户区坐标**，要 `MapWindowPoints` 转屏幕坐标再用。
+fn system_caret_rect() -> Option<ScreenRect> {
+    let mut info = GUITHREADINFO {
+        cbSize: std::mem::size_of::<GUITHREADINFO>() as u32,
+        ..Default::default()
+    };
+    unsafe { GetGUIThreadInfo(0, &mut info) }.ok()?;
+    if info.hwndCaret.is_invalid() {
+        return None;
+    }
+    let caret = info.rcCaret;
+    if caret.right <= caret.left && caret.bottom <= caret.top {
+        return None; // 没有系统光标：自绘光标的应用
+    }
+    let mut points = [
+        POINT {
+            x: caret.left,
+            y: caret.top,
+        },
+        POINT {
+            x: caret.right,
+            y: caret.bottom,
+        },
+    ];
+    // hwndto 传 None：转成屏幕坐标
+    unsafe { MapWindowPoints(Some(info.hwndCaret), None, &mut points) };
+    Some(to_screen(RECT {
+        left: points[0].x,
+        top: points[0].y,
+        right: points[1].x,
+        bottom: points[1].y,
+    }))
 }
 
 /// 当前选区的范围；`GetSelection` 移交所有权，由调用方释放。
@@ -143,12 +198,29 @@ pub(crate) fn foreground_bounds() -> Option<ScreenRect> {
 
 /// 组句范围和选区经常一个准、一个落到窗口右下角。离上一次太远时取更近的那个；
 /// 两个都贴在大窗口右下角、上一次还在输入框附近，就留在上一次。
+///
+/// 主锚点贴在大窗口右下角逐个像素时（WPS 每个键都这样，Chromium 部分上屏后的首键也这样）
+/// **一律不采用**：有新鲜的次锚点（系统光标 / 选区）就用它，没有就留在上一次的正常位置，
+/// 两样都没有才只好用它——候选窗死在屏幕角落里，比贴偏一点糟得多。
 pub(crate) fn stabilize(
     previous: Option<ScreenRect>,
     primary: ScreenRect,
     secondary: Option<ScreenRect>,
     window: Option<ScreenRect>,
 ) -> ScreenRect {
+    if cornerish(primary, window) {
+        if let Some(secondary) = secondary
+            && !cornerish(secondary, window)
+        {
+            return secondary;
+        }
+        if let Some(previous) = previous
+            && !cornerish(previous, window)
+        {
+            return previous;
+        }
+        return primary;
+    }
     let mut chosen = primary;
     if let (Some(previous), Some(secondary)) = (previous, secondary) {
         let primary_jump = jump(previous, primary);
@@ -171,7 +243,8 @@ fn jump(from: ScreenRect, to: ScreenRect) -> i32 {
     (from.left - to.left).abs() + (from.top - to.top).abs()
 }
 
-/// 大窗口右下角一小块。部分上屏后 Chromium 系浏览器用这个位置顶替还没排好的光标。
+/// 大窗口右下角一小块。WPS 对组句范围恒定报这个位置，部分上屏后 Chromium 系浏览器也拿它
+/// 顶替还没排好的光标。
 fn cornerish(rect: ScreenRect, window: Option<ScreenRect>) -> bool {
     let Some(window) = window else {
         return false;
@@ -276,5 +349,45 @@ mod tests {
         );
         let corner = screen(1500, 860, 1502, 880);
         assert_eq!(stabilize(None, corner, None, Some(window)), corner);
+    }
+
+    // WPS 实测形状：组句**第一键**就把锚点报成窗口右下角逐个像素（整个会话都这样），
+    // 没有上一次的正常位置可留——退到次锚点（系统光标 / 鼠标：刚点进输入框，约等于光标）。
+    #[test]
+    fn falls_back_to_the_caret_when_the_first_rect_is_the_corner() {
+        let window = screen(0, 0, 2560, 1400);
+        let corner = screen(2559, 1399, 2560, 1399);
+        let caret = screen(430, 390, 430, 412);
+        assert_eq!(stabilize(None, corner, Some(caret), Some(window)), caret);
+        // 连次锚点都贴在角落里（鼠标就在右下角）：只好用主锚点，别把上次的拽回来
+        assert_eq!(stabilize(None, corner, Some(corner), Some(window)), corner);
+    }
+
+    // 上一段组句也停在角落（WPS 里连着打两段）：次锚点还是新鲜的光标位置，照用。
+    #[test]
+    fn follows_the_caret_when_the_previous_anchor_is_also_the_corner() {
+        let window = screen(0, 0, 2560, 1400);
+        let corner = screen(2559, 1399, 2560, 1399);
+        let caret = screen(430, 390, 430, 412);
+        assert_eq!(
+            stabilize(Some(corner), corner, Some(caret), Some(window)),
+            caret
+        );
+    }
+
+    // 主锚点正常时新逻辑不插手：该跟还是跟，该留还是留（老行为原样）。
+    #[test]
+    fn a_sane_primary_is_untouched() {
+        let window = screen(0, 0, 1600, 900);
+        let previous = screen(40, 80, 40, 100);
+        let moved = screen(200, 80, 200, 100);
+        assert_eq!(
+            stabilize(Some(previous), moved, Some(caret_at(900, 800)), Some(window)),
+            moved
+        );
+    }
+
+    fn caret_at(left: i32, top: i32) -> ScreenRect {
+        screen(left, top, left + 1, top + 18)
     }
 }

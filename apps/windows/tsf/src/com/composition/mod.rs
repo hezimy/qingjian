@@ -93,8 +93,9 @@ fn report_surrounding(engine: &SharedClient, before: String) {
 
 /// 组句进行中才报位置；组句已收 Server 会按空帧 / `Commit` 自行收窗口。
 ///
-/// 部分上屏后同一会话里新起的组句，Chromium 系宿主常把 `GetTextExt` 报成窗口右下角，
-/// 选区却还在输入框。两个都错时留在上一次的位置，避免候选窗跳走。
+/// 次锚点是系统光标（WPS 的 `GetTextExt` 对组句范围每个键都报窗口右下角逐个像素，
+/// `GetSelection` 也是空的，只剩它靠得住）。主锚点贴在大窗口右下角逐个像素时
+/// [`stabilize`] 一律不采用：换次锚点、再不行留在上一次的正常位置。
 fn report_caret(shared: &Shared, engine: &SharedClient, context: &ITfContext, ec: u32) {
     let (primary, secondary) = match shared.composition() {
         Some(composition) => {
@@ -117,6 +118,13 @@ fn report_caret(shared: &Shared, engine: &SharedClient, context: &ITfContext, ec
         foreground_bounds(),
     );
     shared.set_last_anchor(Some(rect));
+    if rect != primary {
+        // 主锚点被 stabilize 换掉了（WPS 报的窗口右下角一类）：留一行，确认换到了哪。
+        crate::com::log::log(&format!(
+            "候选锚点 改用 rect=({},{},{},{})",
+            rect.left, rect.top, rect.right, rect.bottom
+        ));
+    }
     // 引擎正被别处借着（罕见）就跳过这拍，Server 保持上次位置。
     if let Ok(mut guard) = engine.try_borrow_mut()
         && let Some(client) = guard.as_mut()
