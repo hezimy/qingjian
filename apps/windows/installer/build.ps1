@@ -34,6 +34,19 @@ if ($Sign) {
     Write-Host 'uiAccess=0（对外分发：Server 任何机器都能起；候选窗在商店 / 任务栏搜索里可能被盖）' -ForegroundColor Cyan
 }
 
+# 图标靠 rc.exe 编（apps\windows\*\build.rs 的 embed_icon）：winresource 找不到它时只警告、图标就没嵌进去，
+# 在资源管理器 / 任务栏里显示白框。本机 SDK 装在 F 盘（注册表 KitsRoot10 指向 F:\Windows Kits\10\），
+# 照它把 x64 目录补进 PATH；vcvars 那套在这里用不了（cmd /c 被禁）。
+$kitsRoot = (Get-ItemProperty 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows Kits\Installed Roots' -ErrorAction SilentlyContinue).KitsRoot10
+$rc = if ($kitsRoot) {
+    Get-ChildItem (Join-Path $kitsRoot 'bin') -Directory -ErrorAction SilentlyContinue |
+        Sort-Object Name -Descending |
+        ForEach-Object { Join-Path $_.FullName 'x64\rc.exe' } |
+        Where-Object { Test-Path $_ } |
+        Select-Object -First 1
+}
+if ($rc) { $env:PATH = "$(Split-Path $rc);$env:PATH" } else { Write-Host '警告：没找到 Windows SDK 的 rc.exe，exe 图标会缺' -ForegroundColor Yellow }
+
 # 1) 构建三个产物。
 if (-not $SkipBuild) {
     Write-Host '构建 release 产物…' -ForegroundColor Cyan
@@ -56,6 +69,15 @@ $targets = @(
 foreach ($t in $targets) {
     $p = Join-Path $Repo "target\$t"
     if (-not (Test-Path $p)) { throw "缺产物 $p，先跑一次不带 -SkipBuild 的构建" }
+}
+
+# 图标没嵌进去在资源管理器 / 任务栏里就是白框：装包前逐个查，别静默出一个白框包。
+Add-Type -Namespace Qingjian -Name IconApi -MemberDefinition '[DllImport("shell32.dll", CharSet = CharSet.Unicode)] public static extern int ExtractIconEx(string file, int index, System.IntPtr[] large, System.IntPtr[] small, int count);'
+foreach ($t in 'release\qingjian-server.exe', 'release\qingjian-settings.exe') {
+    $p = Join-Path $Repo "target\$t"
+    if ([Qingjian.IconApi]::ExtractIconEx($p, -1, $null, $null, 0) -eq 0) {
+        throw "$t 里没有图标（rc.exe 缺失一类的嵌图标失败），先修好再打包"
+    }
 }
 
 # 1.2) 自包含 Windows App Runtime：设置程序不再依赖机器上装的框架包（Windows 10 上框架依赖的引导用不了，
