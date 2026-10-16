@@ -19,7 +19,7 @@ use qingjian_platform::protocol::{Frame, PreeditKind};
 pub(crate) use self::shared::Shared;
 use self::sink::CompositionSink;
 use super::edit::{
-    InputContext, anchor_rect, caret_rect, foreground_bounds, input_context, stabilize,
+    InputContext, anchor_rect, caret_rect, describe, foreground_bounds, input_context, stabilize,
 };
 use super::service::SharedClient;
 
@@ -111,18 +111,23 @@ fn report_caret(shared: &Shared, engine: &SharedClient, context: &ITfContext, ec
         None if shared.composing() => (caret_rect(context, ec), None),
         None => return,
     };
-    let rect = stabilize(
-        shared.last_anchor(),
-        primary,
-        secondary,
-        foreground_bounds(),
-    );
+    let previous = shared.last_anchor();
+    let window = foreground_bounds();
+    let rect = stabilize(previous, primary, secondary, window);
     shared.set_last_anchor(Some(rect));
     if rect != primary {
-        // 主锚点被 stabilize 换掉了（WPS 报的窗口右下角一类）：留一行，确认换到了哪。
+        // 主锚点被 stabilize 换掉了（WPS 报的窗口右下角一类）：把判断依据一并记下，
+        // 下一轮排查不必再猜是哪条判定起了作用。
         crate::com::log::log(&format!(
-            "候选锚点 改用 rect=({},{},{},{})",
-            rect.left, rect.top, rect.right, rect.bottom
+            "候选锚点 改用 rect=({},{},{},{}) 主={} 次={} 前={} 窗={}",
+            rect.left,
+            rect.top,
+            rect.right,
+            rect.bottom,
+            describe(Some(primary)),
+            describe(secondary),
+            describe(previous),
+            describe(window),
         ));
     }
     // 引擎正被别处借着（罕见）就跳过这拍，Server 保持上次位置。

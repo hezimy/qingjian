@@ -8,17 +8,24 @@
 //! (2559,1399,2560,1399) 一动不动，候选窗因此死在屏幕右下角），`GetSelection` 也是空的、
 //! 连选区都没得量。这种值在 [`stabilize`] 里一律不采用，退到次锚点——系统光标
 //! （[`system_caret_rect`]，跟着真光标走），再不行才是鼠标。
+//!
+//! 判「贴角」不只靠前台窗口：WPS 里 DLL 看到的 `GetForegroundWindow` 未必是输入焦点那个
+//! 窗口，拿不到就整条判定失效、退化残片被原样采用（`stabilize` 的「改用」日志一条也没有，
+//! 候选窗照样死在屏幕右下角）。所以退化残片（宽 ≤2 且高 ≤2，正是 WPS 的 1×0）贴**显示器
+//! 工作区**右下角也算贴角，与窗口矩形无关。
 
 use std::mem::ManuallyDrop;
 use std::sync::atomic::{AtomicI32, Ordering};
 
 use windows::Win32::Foundation::{HWND, POINT, RECT};
-use windows::Win32::Graphics::Gdi::MapWindowPoints;
+use windows::Win32::Graphics::Gdi::{
+    GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MONITORINFO, MapWindowPoints, MonitorFromPoint,
+};
 use windows::Win32::UI::TextServices::{
     ITfContext, ITfRange, TF_ANCHOR_START, TF_DEFAULT_SELECTION, TF_SELECTION,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetCursorPos, GetForegroundWindow, GetGUIThreadInfo, GetWindowRect, GUITHREADINFO,
+    GUITHREADINFO, GetCursorPos, GetForegroundWindow, GetGUIThreadInfo, GetWindowRect,
 };
 use windows::core::BOOL;
 
@@ -244,8 +251,29 @@ fn jump(from: ScreenRect, to: ScreenRect) -> i32 {
 }
 
 /// 大窗口右下角一小块。WPS 对组句范围恒定报这个位置，部分上屏后 Chromium 系浏览器也拿它
-/// 顶替还没排好的光标。
+/// 顶替还没排好的光标。两条独立判定取或：显示器工作区右下角的退化残片，或前台窗口右下角
+/// 的小矩形。任一条拿不到就退到另一条，不互相拖累。
 fn cornerish(rect: ScreenRect, window: Option<ScreenRect>) -> bool {
+    let work = work_area_near(POINT {
+        x: rect.left,
+        y: rect.top,
+    });
+    cornerish_at_work_area(rect, to_screen(work)) || cornerish_at_window(rect, window)
+}
+
+/// 退化残片贴在工作区右下角：WPS 报的假光标恒定落在那儿。**只认退化矩形**（宽 ≤2 且高 ≤2，
+/// 正是它的 1×0），真正的一行高光标（宽 1 高 18）不算——那种贴角也可能真的在屏幕右下角
+/// 打字，别把正常锚点误判掉。工作区右下角是任务栏上沿那个角。
+fn cornerish_at_work_area(rect: ScreenRect, work: ScreenRect) -> bool {
+    if rect.right - rect.left > 2 || rect.bottom - rect.top > 2 {
+        return false;
+    }
+    let dx = work.right - rect.left;
+    let dy = work.bottom - rect.top;
+    (0..220).contains(&dx) && (0..220).contains(&dy)
+}
+
+fn cornerish_at_window(rect: ScreenRect, window: Option<ScreenRect>) -> bool {
     let Some(window) = window else {
         return false;
     };
@@ -260,6 +288,40 @@ fn cornerish(rect: ScreenRect, window: Option<ScreenRect>) -> bool {
         && (0..220).contains(&dy)
         && rect.right - rect.left < 500
         && rect.bottom - rect.top < 120
+}
+
+/// `point` 所在（最近）显示器的工作区（屏幕减去任务栏）；拿不到时给个大范围，让贴角判定
+/// 自然落空。
+fn work_area_near(point: POINT) -> RECT {
+    let mut info = MONITORINFO {
+        cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+        ..Default::default()
+    };
+    let found = unsafe {
+        let monitor = MonitorFromPoint(point, MONITOR_DEFAULTTONEAREST);
+        GetMonitorInfoW(monitor, &mut info).as_bool()
+    };
+    if found {
+        info.rcWork
+    } else {
+        RECT {
+            left: 0,
+            top: 0,
+            right: i32::MAX,
+            bottom: i32::MAX,
+        }
+    }
+}
+
+/// 日志里描述一个可选矩形：`(l,t,r,b)` 或 `无`。
+pub(crate) fn describe(rect: Option<ScreenRect>) -> String {
+    match rect {
+        Some(rect) => format!(
+            "({},{},{},{})",
+            rect.left, rect.top, rect.right, rect.bottom
+        ),
+        None => "无".to_owned(),
+    }
 }
 
 #[cfg(test)]
@@ -382,12 +444,42 @@ mod tests {
         let previous = screen(40, 80, 40, 100);
         let moved = screen(200, 80, 200, 100);
         assert_eq!(
-            stabilize(Some(previous), moved, Some(caret_at(900, 800)), Some(window)),
+            stabilize(
+                Some(previous),
+                moved,
+                Some(caret_at(900, 800)),
+                Some(window)
+            ),
             moved
         );
     }
 
     fn caret_at(left: i32, top: i32) -> ScreenRect {
         screen(left, top, left + 1, top + 18)
+    }
+
+    // WPS 里 `GetForegroundWindow` 拿不到、窗口矩形为 `None`，判定不能因此失效：退化残片
+    // （1×0）贴工作区右下角照样算贴角，退到系统光标。
+    #[test]
+    fn work_area_corner_catches_the_wps_fragment_without_a_window() {
+        let work = screen(0, 0, 2560, 1400);
+        let fragment = screen(2559, 1399, 2560, 1399);
+        assert!(cornerish_at_work_area(fragment, work));
+    }
+
+    // 真正的一行高光标（宽 1 高 18）不是残片：即便恰好在工作区右下角也原样采用，
+    // 别把「用户就是在屏幕右下角打字」的锚点误判成贴角。
+    #[test]
+    fn work_area_corner_spares_a_real_caret_row() {
+        let work = screen(0, 0, 2560, 1400);
+        let caret = screen(2559, 1399, 2560, 1417);
+        assert!(!cornerish_at_work_area(caret, work));
+    }
+
+    #[test]
+    fn a_fragment_in_the_middle_is_not_the_corner() {
+        let work = screen(0, 0, 2560, 1400);
+        let fragment = screen(430, 390, 431, 390);
+        assert!(!cornerish_at_work_area(fragment, work));
     }
 }
