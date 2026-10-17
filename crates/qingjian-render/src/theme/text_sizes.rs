@@ -5,9 +5,7 @@
 //! 拼音行与序号的字号是绝对值（它们的节点用哪个文字样式由主题决定），字重与颜色同样按角色盖过；
 //! 两者填了各自的绝对字号就盖过主题的，不填仍跟候选字缩放。
 
-use super::FontSpec;
-use super::font::FontWeight;
-use crate::color::Color;
+use bamboo_slip::{Color, FontSpec, FontWeight};
 
 /// 候选窗里的一种文字。设置里三处各记一份覆盖。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -1,5 +1,7 @@
 # Linux Fcitx5 默认面板
 
+Linux Server 在 `[predict] enabled = true` 且密钥可用时接入共享的 `CloudPredictor`，沿现有 Poll 帧返回异步云端候选和整句补全。云端词只补第一页末尾未被用户选中的格，默认面板用 ☁ 标记词并在辅助行显示整句；会话切换、失焦和隐私边界会作废旧结果。Fcitx5 插件从有效的 `surroundingText()` 读取应用光标前后文，跳过选区并各截取最多 80 字；Server 在敏感输入中忽略它。不做云端译词兜底；`[predict]` 配置热加载会重建客户端，撤销旧请求、翻译评审与所有会话中的旧云候选。Fcitx5 的 Sensitive、Password、Disable 能力由插件上报给 Server。
+
 第一阶段保留 Rust Server、薄插件和用户目录安装。输入模式、组句、选词、翻页、隐私和失焦提交均在 Server；
 插件负责 Fcitx 事件与默认预编辑 / 候选 API。长期自绘方向不变，后续由 Server 渲染并管理 X11 窗口，或向 GNOME 扩展发送位图；本阶段不带相关源码、补丁、渲染 FFI、服务管理或 Debian 包。
 
@@ -17,7 +19,7 @@ cargo test --workspace --exclude qingjian-macos --locked
 cargo build -p qingjian-linux-server --locked
 cmake -S apps/linux/fcitx5 -B target/fcitx5-stage1 -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON
 cmake --build target/fcitx5-stage1 --parallel 2
-env -u DBUS_SESSION_BUS_ADDRESS ctest --test-dir target/fcitx5-stage1 --output-on-failure
+env -u DBUS_SESSION_BUS_ADDRESS ctest --test-dir target/fcitx5-stage1 --output-on-failure < /dev/null
 python3 apps/linux/tests/installation.py
 ```
 
@@ -31,7 +33,7 @@ CTest 的 `real-server` 实际运行 Rust Server 并通过 InputContext 输入�
 插件只持有一条连接和一个 I/O watcher，每个 InputContext 分配独立、递增的 session ID。
 每个会话先 `OpenSession` 校验共享协议版本（`PROTOCOL_VERSION`），再协商 `LinuxHello` v3，携带 session/generation/context，返回会话编号和既有预编辑设置。
 首次能力确认前不接受输入；握手与能力状态逐会话保存。同一连接支持超过 64 个上下文，64 条连接的资源保护不限制单连接会话数。
-Linux 的首个回包仍是含 `linux_ui` 的 `Update`，不额外发送 Windows DLL 使用的 `SessionOpened`；旧版插件的协议 5 连接会被拒绝，升级时需同时更新 Server 与插件。
+Linux 的首个回包仍是含 `linux_ui` 的 `Update`，不额外发送 Windows DLL 使用的 `SessionOpened`；旧版插件的协议 7 / 8 连接会被拒绝，升级时需同时更新 Server 与插件。
 旧版本或损坏响应关闭连接、清空显示并放行当前输入；重连创建全新输入状态，旧提交不会重放。
 插件先交付有效上屏，再清空或更新预编辑，避免 Chromium 原生 Wayland 在这两步倒置时重复上屏（#213）。
 上屏与显示回调都可能同步重入；上屏前和重画前检查上下文存活、连接代次、生命周期、显示修订号与帧身份，以及焦点和能力。
@@ -41,7 +43,8 @@ Linux 的首个回包仍是含 `linux_ui` 的 `Update`，不额外发送 Windows
 销毁上下文时撤销安全引用并排队 CloseSession，由事件循环延迟发送，不阻塞析构，也不关闭其他会话。
 共享连接故障先让全部会话失效，再清理各自显示；清理回调期间不重连。
 
-LinuxEvent 转发能力、按下 / 释放、焦点、停用原因、客户端预编辑事实、带帧身份的候选点击和翻页。
+LinuxEvent 转发能力、按下 / 释放、焦点、停用原因、客户端预编辑事实、带帧身份的候选点击和翻页。按键事件可带应用前后文；旧插件省略此字段时 Server 仍可解析。焦点恢复与候选点击不会复用旧前后文。
+选区翻译使用 `[shortcut] translate_selection`（Linux 缺省 `Alt + Shift + T`）；新插件在按键事件标记 `selection_supported`，Server 只向支持的插件返回 `RequestSelection`，兼容旧插件。插件从有效的 `surroundingText()` 读取最多 500 字选区并回 `LinuxEvent::Selection`。评审候选无预编辑，返回帧的 `translation_pending` 让插件在「翻译中…」期间轮询；提交前再次核对选区文字和光标位置。焦点、隐私、Reset、停用会取消翻译。
 空能力是普通输入；Sensitive 可组句但不学习、不记输入文本；Password / Disable 优先禁用并丢弃输入。
 能力先由 Server 确认，再清理可能同步重入的预编辑；Reset / 焦点变化不会丢掉能力通知，清理中重入的新按键已受新隐私状态约束。
 能力变化清理组句、暂存透传、学习链与补全；能力即将改变时的 deactivate 原因也触发清理，即使框架此刻仍返回旧能力。
@@ -74,6 +77,14 @@ Server 启动时按 `[model] enabled`（缺省开）在后台线程加载模型�
 未出候选时先确认手动 Server 在运行，再查看 `$XDG_STATE_HOME/qingjian/logs/server.*.log`（缺省 `~/.local/state`）。
 输入日志由 `[general] input_log` 控制；用户配置和学习文件始终保存在 XDG 用户目录，卸载不删除。
 
+## 发行版打包
+
+做系统级包（deb / rpm / AUR 等）时，把 `assets/icon/linux/hicolor/` 下八档 PNG（16/22/24/32/48/64/128/256）逐档装到
+`/usr/share/icons/hicolor/<尺寸>x<尺寸>/apps/qingjian.png`，文件名保持 `qingjian.png`。八档已随仓库栅格化提交，打包不依赖
+ImageMagick；不要把 1024px 源图塞进尺寸目录，也不要只装 `resources/assets/` 里的程序资源副本（图标主题不读该路径），
+否则不缩放的托盘会显示巨图（#547）。安装循环片段与图标缓存刷新说明见
+[图标说明](../../assets/icon/README.md#linux-发行版打包)。
+
 ## 验证环境
 
 - Ubuntu 26.04，未打补丁的 Fcitx5 5.1.19-1 / Core7 / modules，GTK4 4.22.4、Qt6 6.10.2。
@@ -82,3 +93,9 @@ Server 启动时按 `[model] enabled`（缺省开）在后台线程加载模型�
   默认面板的外观与位置由 Fcitx5 决定：GTK4 应用里是输入模块自己画的黑白面板，Firefox 里是 Fcitx5 的橙色面板且与光标同一行，Fcitx5 自带拼音表现相同。
 - 真实桌面（2026-09-22，本地整句模型）：CachyOS，niri（原生 Wayland），Fcitx5 5.1.22，Microsoft Edge（Chromium，`--enable-wayland-ime`）与 Konsole（Qt6）：停顿后整句候选按模型换序。
 - 未验证：KDE 与其他桌面、其他发行版、GTK3 / Qt5 应用、真实 X11 桌面会话。
+
+## PR #351 回归验证
+
+在 Ubuntu 26.04.1 容器、Fcitx5 5.1.19-1 中，旧分支复现了 panel 与 lifecycle 用例的 13 个失败：旧帧省略可选 `kind` / `sentence` 时，渲染抛异常使连接断开，进而丢失预编辑、失焦提交和后续能力通知。修复保留旧帧测试形状，新增云字段展示和选区提交复核 / 重入用例，CTest 54 项全过（stdin 接 `/dev/null`）。
+
+同一环境以 Xvfb、私有 D-Bus 和真实 GTK3 输入框验证：输入 `nihao` 后空格只上屏一次「你好」；把 `[predict]` 从关闭改为指向本地模拟服务，同一 Server 进程能发出云联想请求。该 GTK3 控件虽保留选中状态，传给 Fcitx5 的 surrounding text 未包含选区锚点，故本次未完成它的选区替换实测；选区复核由 CTest 覆盖。已有 Fcitx4 桌面验证见 [Fcitx4 适配](linux-fcitx4.md#本机验证)。

@@ -1,7 +1,7 @@
 //! 协议分派：把 DLL 发来的 [`ClientMessage`] 交给 Engine，产出回给 DLL 的 [`ServerMessage`]。
 //! 消息分派在 [`message`]，会话在 [`session`]，组句展示状态在 [`composed`]，按键在 [`key`]，
 //! 候选窗口输出在 [`candidates`]，状态条在 [`status`]，翻译选中文字在 [`translate`]，配置热加载在 [`reload`]，
-//! 本地整句模型在 [`rescore`]，形码码表在 [`code`]。
+//! 本地整句模型在 [`rescore`]，形码码表在 [`code`]，符号面板在 [`panel`]。
 
 mod candidates;
 mod code;
@@ -10,6 +10,7 @@ mod config;
 mod key;
 mod message;
 mod mode;
+mod panel;
 mod reload;
 mod rescore;
 mod session;
@@ -20,7 +21,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
-use qingjian_core::Engine;
+use qingjian_core::{Engine, Grid};
 use qingjian_platform::LocalModelConfig;
 use qingjian_platform::protocol::{
     ClientMessage, Frame, IndicatorState, InputSettings, ScreenRect, ServerMessage, SessionId,
@@ -31,6 +32,8 @@ pub use self::candidates::{CandidateSink, NoopSink, RenderSettings, TextStyleSet
 pub use self::code::find_code_table;
 use self::composed::Composed;
 pub use self::config::RouterConfig;
+use self::panel::PanelGrid;
+pub use self::panel::{PanelCell, PanelFrame, PanelMouse};
 use self::reload::ConfigReload;
 pub use self::reload::{DataDirs, attach_cloud};
 pub use self::rescore::find_model;
@@ -80,6 +83,9 @@ pub struct Router {
     /// 当前高亮候选在布局里的下标（跨页）。
     highlight: usize,
 
+    /// 横排展开成矩阵时的视口；`None` 是单行。新一轮查询收回单行（与 macOS 壳的 `Session` 一致）。
+    grid: Option<Grid>,
+
     /// 这轮查询里动过高亮：动过就不再拿重排结果换掉候选；注音模式数字键动过之后才选词。
     navigated: bool,
 
@@ -113,6 +119,12 @@ pub struct Router {
 
     /// 上次真正显示的帧与位置：没变就不重画（组字期间的空转 Poll 很多）。
     last_shown: Option<(Frame, Mode, ScreenRect)>,
+
+    /// 符号面板当前分类的格子；面板没开时为 `None`。
+    panel: Option<PanelGrid>,
+
+    /// 上次显示的面板与光标矩形，没变就不重画；面板没在显示时为 `None`。
+    last_panel: Option<(PanelFrame, Option<ScreenRect>)>,
 
     /// 本地整句模型（`.qjm` 或三件套目录）；没有模型文件为 `None`。
     model_path: Option<PathBuf>,
@@ -153,6 +165,7 @@ impl Router {
             sentence: None,
             notice: None,
             highlight: 0,
+            grid: None,
             navigated: false,
             last_flush: Instant::now(),
             reload: None,
@@ -164,6 +177,8 @@ impl Router {
             ime_active: false,
             last_rect: None,
             last_shown: None,
+            panel: None,
+            last_panel: None,
             model_path: None,
             code_table: None,
             model_loader: None,
@@ -187,6 +202,8 @@ impl Router {
             shift_letter_compose: self.config.shift_letter_compose,
             restore_mode: self.config.default_english || self.config.remember_mode_per_app,
             english_candidates: self.config.english_candidates_in(app),
+            predict: (self.config.cloud_enabled && self.engine.prediction_enabled())
+                .then_some(self.config.predict),
         }
     }
 
@@ -197,6 +214,7 @@ impl Router {
             english_full_width_punctuation: self.config.english_full_width,
             status_bar: self.config.status_enabled,
             update_available: self.update_available(),
+            symbol_panel: self.panel_open(),
         }
     }
 

@@ -6,7 +6,13 @@ use qingjian_render::{Row, Tone};
 
 /// `position` 是页内下标（从 0 起）。`show_code` 是 `[general] aux_code_show`：
 /// 打开且候选带码时，码用方括号括起来紧跟在候选词后面（`鹤[rbm]`），不进 annotation。
-pub(crate) fn from_candidate(position: usize, candidate: &Candidate, show_code: bool) -> Row {
+/// `show_pos` 是 `[general] translation_pos`：关掉时译词保留、词性段（v. / n. / adj.）不画。
+pub(crate) fn from_candidate(
+    position: usize,
+    candidate: &Candidate,
+    show_code: bool,
+    show_pos: bool,
+) -> Row {
     let code = candidate
         .aux_code
         .as_ref()
@@ -21,10 +27,10 @@ pub(crate) fn from_candidate(position: usize, candidate: &Candidate, show_code: 
     if let Some(translation) = &candidate.translation {
         if both {
             push_label(&mut annotation, translation.language);
-            push_translation(&mut annotation, translation, false);
+            push_translation(&mut annotation, translation, false, show_pos);
         } else {
             let leading = !annotation.is_empty();
-            push_translation(&mut annotation, translation, leading);
+            push_translation(&mut annotation, translation, leading, show_pos);
         }
     }
     // 第二种语言第一条译词的下标：前面的分隔符与标签算第一种语言，点译词按它分语言
@@ -38,7 +44,7 @@ pub(crate) fn from_candidate(position: usize, candidate: &Candidate, show_code: 
         annotation.len()
     });
     if let Some(translation) = &candidate.alt_translation {
-        push_translation(&mut annotation, translation, false);
+        push_translation(&mut annotation, translation, false, show_pos);
     }
     Row {
         index: (position + 1).to_string(),
@@ -70,17 +76,19 @@ fn push_label(annotation: &mut Vec<(String, Tone)>, language: Language) {
     annotation.push((format!("{} ", language_mark(language)), Tone::Faint));
 }
 
-/// 把一门语言的译词接到 annotation 后面。`leading_separator` 为真时（前面已有读音）先补一个分隔符。
+/// 把一门语言的译词接到 annotation 后面。`leading_separator` 为真时（前面已有读音）先补一个分隔符；
+/// `show_pos` 为假时（`[general] translation_pos` 关掉）不画词性段。
 fn push_translation(
     annotation: &mut Vec<(String, Tone)>,
     translation: &Translation,
     leading_separator: bool,
+    show_pos: bool,
 ) {
     for (i, sense) in translation.senses().iter().enumerate() {
         if i > 0 || leading_separator {
             annotation.push((" · ".to_owned(), Tone::Separator));
         }
-        if let Some(pos) = sense.part_of_speech {
+        if show_pos && let Some(pos) = sense.part_of_speech {
             annotation.push((format!("{pos} "), Tone::Pos));
         }
         let tone = if sense.fresh {
@@ -93,6 +101,71 @@ fn push_translation(
             if let Some(reading) = segment.reading {
                 annotation.push((format!("({reading})"), Tone::Faint));
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use qingjian_core::{Language, PartOfSpeech, Sense, Translation};
+
+    use super::*;
+
+    fn candidate_with_gloss() -> Candidate {
+        Candidate {
+            text: "开发".to_owned(),
+            kind: CandidateKind::Chinese,
+            syllables: vec!["kai".to_owned(), "fa".to_owned()],
+            reading: None,
+            translation: Some(Translation::new(
+                Language::English,
+                vec![Sense {
+                    part_of_speech: Some(PartOfSpeech::Verb),
+                    text: "develop".to_owned(),
+                    reading: None,
+                    fresh: false,
+                }],
+            )),
+            aux_code: None,
+            alt_translation: None,
+        }
+    }
+
+    #[test]
+    fn part_of_speech_follows_the_frame_switch() {
+        let on = from_candidate(0, &candidate_with_gloss(), false, true);
+        let joined: String = on
+            .annotation
+            .iter()
+            .map(|(text, _)| text.as_str())
+            .collect();
+        assert!(joined.contains("v. "), "{joined}");
+        assert!(joined.contains("develop"), "{joined}");
+
+        // 关掉后词性段消失，译词与分隔结构原样保留
+        let off = from_candidate(0, &candidate_with_gloss(), false, false);
+        let joined: String = off
+            .annotation
+            .iter()
+            .map(|(text, _)| text.as_str())
+            .collect();
+        assert!(!joined.contains("v. "), "{joined}");
+        assert!(joined.contains("develop"), "{joined}");
+        assert_eq!(on.annotation.len() - 1, off.annotation.len());
+    }
+
+    #[test]
+    fn a_gloss_without_part_of_speech_is_unchanged_by_the_switch() {
+        let mut candidate = candidate_with_gloss();
+        candidate.translation.as_mut().unwrap().senses_mut()[0].part_of_speech = None;
+        for show_pos in [true, false] {
+            let row = from_candidate(0, &candidate, false, show_pos);
+            let joined: String = row
+                .annotation
+                .iter()
+                .map(|(text, _)| text.as_str())
+                .collect();
+            assert_eq!(joined, "develop");
         }
     }
 }

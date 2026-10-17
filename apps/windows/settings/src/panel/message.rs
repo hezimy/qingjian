@@ -9,12 +9,16 @@ pub(crate) enum Message {
     // 通用页
     /// 勾上 / 去掉一门学习语言。`code` 是语言代码，`"off"` 是「不显示译文」。
     LearningPick(&'static str, bool),
+    /// 译词旁是否显示词性标注（`[general] translation_pos`）。
+    TranslationPos(bool),
     PageSize(Option<f64>),
     Scheme(Option<usize>),
     ShuangpinRawPreedit(bool),
     Wubi(bool),
-    Traditional(bool),
-    Emoji(bool),
+    Traditional(Option<usize>),
+    Emoji(Option<usize>),
+    Kaomoji(Option<usize>),
+    Symbols(Option<usize>),
     EnglishCandidates(bool),
     EnglishInChinese(bool),
     ChineseFirst(bool),
@@ -39,6 +43,8 @@ pub(crate) enum Message {
     Appearance(Option<usize>),
     Theme(Option<usize>),
     Layout(Option<usize>),
+    /// 横排时 ↑ / ↓ 把单行展开成多行矩阵。
+    HorizontalGrid(bool),
     Preedit(Option<usize>),
     Renderer(Option<usize>),
     /// 字体下拉里选了一个字族；「系统字体」是空串。
@@ -63,11 +69,15 @@ pub(crate) enum Message {
     // 云服务页
     LocalModel(bool),
     CloudEnabled(bool),
+    CloudAutomatic(bool),
+    CloudDebounce(Option<f64>),
+    CloudMinInterval(Option<f64>),
     CloudApiKey(String),
     CloudModel(String),
     CloudBaseUrl(String),
     CloudSlots(Option<f64>),
     CloudSentence(bool),
+    CloudSentenceTranslation(bool),
     TestConnection,
     CloudTestDone(Result<String, String>),
 
@@ -85,6 +95,7 @@ pub(crate) enum Message {
     DeleteCandidate(Option<usize>),
     /// 只换修饰键，字母键固定用当前的。
     TranslateSelection(Option<usize>),
+    PredictShortcut(Option<usize>),
 
     // 模糊音页
     /// 配置键 + 新值。

@@ -78,8 +78,8 @@ impl Router {
                 None
             }
             ClientMessage::HideCandidates { session } => {
-                // 组句在 DLL 侧结束（应用终止组句 / 翻译评审失焦）：连缓冲一起清掉并收窗口。
-                // 只收窗不清缓冲的话，这个会话不再发键时那段拼音就永远留在 Server 里。
+                // 组句在 DLL 侧结束（应用终止组句 / 翻译评审失焦）：连缓冲一起清掉并收窗口，在飞的云联想与翻译评审
+                // 也一并取消。只收窗不清缓冲的话，这个会话不再发键时那段拼音就永远留在 Server 里。
                 if self.focused == Some(session) {
                     self.reset_composition();
                 }
@@ -133,7 +133,9 @@ impl Router {
         if self.translation.is_some() {
             return self.handle_translation_review(session, &event);
         }
-        if self.engine.composition().is_empty()
+        if self.config.cloud_enabled
+            && self.engine.composition().is_empty()
+            && !self.panel_open()
             && self.engine.prediction_enabled()
             && self.matches_translate_combo(&event)
         {

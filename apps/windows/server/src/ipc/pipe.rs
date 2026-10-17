@@ -23,9 +23,9 @@ use windows::Win32::System::Pipes::{
 };
 use windows::core::{HRESULT, HSTRING};
 
-use qingjian_platform::protocol::{ClientMessage, ServerMessage, read_message, write_message};
+use qingjian_platform::protocol::{ClientMessage, ServerMessage};
 
-use super::Work;
+use super::{Handled, Work};
 use crate::dispatch::Router;
 
 pub use qingjian_platform::protocol::DEFAULT_PIPE_NAME;
@@ -76,6 +76,7 @@ pub fn serve_pipe(
             Ok(Work::Status(event)) => router.handle_status_event(event),
             Ok(Work::Click(target)) => router.handle_click(target),
             Ok(Work::ConnectionClosed(session)) => router.handle_connection_closed(session),
+            Ok(Work::Panel(hit)) => router.handle_panel_mouse(hit),
             Err(RecvTimeoutError::Timeout) => continue,
             Err(RecvTimeoutError::Disconnected) => break,
         }
@@ -168,46 +169,41 @@ fn wait_client(stream: File) -> io::Result<File> {
 }
 
 /// 服务一条连接：读消息 → 转给工人线程 → 写回，直到对端在帧边界关闭或出错。
+///
+/// 断开后把本连接上开过的会话照单 `CloseSession`：DLL 来不及发（应用被关 / 崩了），
+/// 会话留在 Router 里会让聚焦会话的组句与候选窗口一直挂着，直到别的应用来一个键把它挤掉。
 fn serve_connection(mut stream: File, sender: Sender<Work>) {
     let (reply_sender, reply_receiver) = mpsc::channel::<Option<ServerMessage>>();
-    // 这条连接开的会话号（`OpenSession` 里带上来）；断开时用它收掉残留的候选窗。
-    let mut session = None;
-    loop {
-        let message = match read_message::<_, ClientMessage>(&mut stream) {
-            Ok(Some(message)) => message,
-            Ok(None) => break,
-            Err(error) => {
-                tracing::warn!(%error, "客户端会话读出错");
-                break;
+    let mut opened = Vec::new();
+    let outcome = super::pump(
+        &mut stream,
+        |message| {
+            if sender
+                .send(Work::Client(message, reply_sender.clone()))
+                .is_err()
+            {
+                return Handled::Stop;
             }
-        };
-        if let ClientMessage::OpenSession {
-            session: opened, ..
-        } = &message
-        {
-            session = Some(*opened);
-        }
-        if sender
-            .send(Work::Client(message, reply_sender.clone()))
-            .is_err()
-        {
-            break;
-        }
-        match reply_receiver.recv() {
-            Ok(Some(response)) => {
-                if write_message(&mut stream, &response).is_err() {
-                    break;
-                }
+            match reply_receiver.recv() {
+                Ok(reply) => Handled::Reply(reply.map(Box::new)),
+                Err(_) => Handled::Stop,
             }
-            Ok(None) => {}
-            Err(_) => break,
-        }
+        },
+        &mut opened,
+    );
+    if let Err(error) = outcome {
+        tracing::warn!(%error, "客户端会话读出错");
     }
-    let _ = unsafe { DisconnectNamedPipe(HANDLE(stream.as_raw_handle())) };
-    // 宿主进程退出 / 崩溃时 DLL 根本没机会发 `CloseSession`，它那份候选窗会一直盖在屏幕上。
-    // 替它通知工人线程收窗（只收窗，不删会话——DLL 断线重连用的是同一个会话号）。
-    if let Some(session) = session {
+    for session in opened {
+        // 工人线程已经不在了就没人收，丢掉即可
+        let _ = sender.send(Work::Client(
+            ClientMessage::CloseSession { session },
+            reply_sender.clone(),
+        ));
+        // 宿主进程退出 / 崩溃时 DLL 来不及发 `CloseSession`，它那份候选窗会一直盖在屏幕上：
+        // 会话已由上一步收掉，这里再补一次收窗（无会话时是空操作），兜住 DLL 断线重连复用同一会话号的情形。
         let _ = sender.send(Work::ConnectionClosed(session));
     }
+    let _ = unsafe { DisconnectNamedPipe(HANDLE(stream.as_raw_handle())) };
     tracing::debug!("客户端断开");
 }

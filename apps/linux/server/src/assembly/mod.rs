@@ -1,5 +1,6 @@
 //! 装配 Engine：Server 里唯一知道具体 Translator / Learner 类型的地方，装的东西与 macOS 的 `host::init` 一致。
 
+mod cloud;
 mod language_model;
 mod spec;
 
@@ -14,6 +15,7 @@ use qingjian_translate::{Glossary, LayeredTranslator, LevelTable, PersonalGlossa
 
 use crate::error::ServerError;
 
+pub use self::cloud::attach_cloud;
 pub use self::language_model::LanguageModelFiles;
 pub use self::spec::AssemblySpec;
 
@@ -39,7 +41,7 @@ pub fn assemble(spec: &AssemblySpec) -> Result<Engine, ServerError> {
     }
     if let Some(dir) = &spec.user_dir {
         engine = engine
-            .with_usage_meter(Box::new(UsageStats::open(dir.join("usage.tsv"))))
+            .with_usage_meter(Box::new(UsageStats::open(dir)))
             .with_vocabulary_tracker(Box::new(load_vocabulary(dir, spec.levels_dir.as_deref())));
         if spec.input_log {
             let path = spec

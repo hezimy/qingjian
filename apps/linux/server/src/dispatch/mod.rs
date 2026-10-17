@@ -9,6 +9,7 @@ mod message;
 mod reload;
 mod rescore;
 mod session;
+mod translate;
 
 use self::composed::Composed;
 pub use self::config::RouterConfig;
@@ -16,6 +17,7 @@ use self::reload::ConfigReload;
 pub use self::rescore::find_model;
 use self::rescore::{ModelLoader, RescoreState};
 use self::session::SessionInfo;
+use self::translate::Translation;
 use qingjian_core::Engine;
 use qingjian_platform::protocol::{ClientMessage, ServerMessage, SessionId};
 use std::collections::HashMap;
@@ -48,8 +50,16 @@ pub struct Router {
     /// 本轮是否已主动移动候选。
     navigated: bool,
 
-    /// 可选的整句提示；首版没有云服务。
+    /// 云端返回的整句补全。
     sentence: Option<String>,
+
+    /// 当前焦点中的选区翻译评审。
+    translation: Option<Translation>,
+
+    /// 插件选区请求标识，防止旧回复跨会话生效。
+    selection_seq: u64,
+
+    pending_selection: Option<(SessionId, u64)>,
 
     /// 删除候选等操作提示。
     notice: Option<String>,
@@ -76,7 +86,9 @@ pub struct Router {
 impl Router {
     pub fn new(engine: Engine, mut config: RouterConfig) -> Self {
         config.page_size = config.page_size.clamp(1, 9);
-        config.cloud_slots = 0;
+        if !engine.prediction_enabled() {
+            config.cloud_slots = 0;
+        }
         Self {
             engine,
             config,
@@ -86,6 +98,9 @@ impl Router {
             highlight: 0,
             navigated: false,
             sentence: None,
+            translation: None,
+            selection_seq: 0,
+            pending_selection: None,
             notice: None,
             display_revision: 0,
             last_flush: Instant::now(),
@@ -112,6 +127,7 @@ impl Router {
         self.poll_config_reload();
         self.attach_loaded_model();
         self.advance_rescoring();
+        self.poll_prediction();
         if self.last_flush.elapsed() >= LEARNING_FLUSH_INTERVAL {
             self.flush_learning();
         }

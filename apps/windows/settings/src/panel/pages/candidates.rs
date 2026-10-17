@@ -243,6 +243,14 @@ pub(crate) fn view(settings: &Settings, context: &mut ViewContext<Settings>) -> 
             ),
         ),
         field(
+            "多行展开",
+            "勾上后横排下 ↑ / ↓ 把一行展开成 6 行矩阵并换行，← / → 在候选之间移动（← 顶到第一个候选后接着按可移动拼音光标，→ 移回末尾后恢复移动候选），第一排再按 ↑ 回到第一个候选，Esc 第一下先收回；不勾（缺省）按键与以前一样。",
+            ToggleSwitch::new()
+                .is_on(g.horizontal_grid)
+                .is_enabled(g.layout == LayoutMode::Horizontal)
+                .on_toggled(context.callback(Message::HorizontalGrid)),
+        ),
+        field(
             "渲染引擎",
             RENDERER_HINT[usize::from(!live)],
             mode_combo(

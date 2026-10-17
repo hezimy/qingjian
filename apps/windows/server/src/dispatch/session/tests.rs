@@ -13,7 +13,7 @@ use qingjian_platform::protocol::{
 };
 use qingjian_render::Mode;
 
-use crate::dispatch::{CandidateSink, RenderSettings, Router, RouterConfig};
+use crate::dispatch::{CandidateSink, PanelFrame, RenderSettings, Router, RouterConfig};
 
 /// 记下候选窗被显示 / 收起的次数。
 #[derive(Default)]
@@ -30,6 +30,10 @@ impl CandidateSink for Arc<RecordingSink> {
     fn hide(&self) {
         self.hidden.fetch_add(1, Ordering::Relaxed);
     }
+
+    fn show_panel(&self, _frame: PanelFrame, _rect: Option<ScreenRect>) {}
+
+    fn hide_panel(&self) {}
 
     fn configure(&self, _settings: RenderSettings) {}
 }

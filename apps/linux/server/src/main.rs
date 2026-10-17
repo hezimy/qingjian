@@ -1,4 +1,4 @@
-//! Linux 本地输入服务启动入口；云服务在首版保持关闭，本地整句模型按 `[model]` 开关在后台加载，之后改配置由热加载应用。
+//! Linux 本地输入服务；云联想与本地模型按配置加载，之后改配置由热加载应用。
 #[cfg(target_os = "linux")]
 mod paths;
 
@@ -73,12 +73,16 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     engine.set_shift_letter_compose(config.general.shift_letter.compose());
     engine.set_learning(config.general.learning);
     engine.set_chinese_first(config.general.chinese_first);
-    engine.set_emoji_candidates(config.general.emoji);
+    engine.set_emoji_limit(usize::from(config.general.emoji.get()));
+    engine.set_kaomoji_limit(usize::from(config.general.kaomoji.get()));
+    engine.set_symbol_limit(usize::from(config.general.symbols.get()));
+    engine.set_traditional(config.general.traditional());
     engine.set_english_in_chinese(config.general.english_in_chinese);
     engine.set_mode_keys(config.shortcut.mode);
     engine
         .set_custom_phrases(config.custom_phrases.clone())
         .map_err(std::io::Error::other)?;
+    assembly::attach_cloud(&mut engine, &config.predict);
     engine.log_session(env!("CARGO_PKG_VERSION"), "linux");
     let mut router = Router::new(engine, RouterConfig::from(&config));
     router.configure_local_model(find_model(Some(&user_dir), &root), &config.model);

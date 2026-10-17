@@ -37,6 +37,9 @@ pub struct ShortcutConfig {
     /// 把应用里选中的文字译成学习语言（需要云服务开着）。
     pub translate_selection: KeyCombo,
 
+    /// Windows 组句中按需调用 AI（缺省 Ctrl+Alt+J）。
+    pub predict: KeyCombo,
+
     /// 数字键配这些修饰键：删掉候选（用户词整个删掉，词库词清掉对它的学习）。
     pub delete_candidate: Modifiers,
 }
@@ -48,6 +51,17 @@ impl Default for ShortcutConfig {
         let (translation, translation_second) = (Modifiers::CONTROL, Modifiers::SHIFT_CONTROL);
         #[cfg(not(windows))]
         let (translation, translation_second) = (Modifiers::OPTION, Modifiers::SHIFT_OPTION);
+        #[cfg(target_os = "linux")]
+        let translate_selection = KeyCombo {
+            modifiers: Modifiers {
+                option: true,
+                shift: true,
+                ..Modifiers::default()
+            },
+            key: 't',
+        };
+        #[cfg(not(target_os = "linux"))]
+        let translate_selection = KeyCombo::TRANSLATE_DEFAULT;
         Self {
             mode: ModeKeys::default(),
             switch_mode: SwitchKeys::default(),
@@ -56,7 +70,8 @@ impl Default for ShortcutConfig {
             extra_page_keys: PageKeys::default(),
             translation,
             translation_second,
-            translate_selection: KeyCombo::TRANSLATE_DEFAULT,
+            translate_selection,
+            predict: KeyCombo::PREDICT_DEFAULT,
             delete_candidate: Modifiers::SHIFT,
         }
     }

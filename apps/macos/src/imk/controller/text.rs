@@ -73,12 +73,19 @@ impl QingjianInputController {
                     self.commit_raw(client);
                 }
                 if c.is_ascii_alphabetic() {
-                    client.insert_text(&letter.to_string());
+                    // 自己插入的字母也过自动空格（不走 pass_through：这里不管补不补都由我们插入）
+                    let lead =
+                        host::with(|h| h.engine.auto_space_before(letter.encode_utf8(&mut [0; 4])))
+                            .unwrap_or(false);
+                    client.insert_text(&if lead {
+                        format!(" {letter}")
+                    } else {
+                        letter.to_string()
+                    });
                     host::with(|h| h.engine.note_passthrough(letter));
                     return true;
                 }
-                host::with(|h| h.engine.note_passthrough(c));
-                return false;
+                return self.pass_through(c, client);
             }
             // 英文候选：字母（以及组词中的 _ ' -）进缓冲区，候选来自英文词表。选词与中文模式一样：
             // 空格选高亮（词上屏后空格照样交给应用，接着打下一个词）、数字选当前页第 N 个、翻页键翻页；
@@ -109,8 +116,7 @@ impl QingjianInputController {
                     self.commit_raw(client);
                 }
             }
-            host::with(|h| h.engine.note_passthrough(c));
-            return false;
+            return self.pass_through(c, client);
         }
         // 表达式模式（v 开头）：数字与运算符进缓冲区，不当选词 / 翻页键
         let expression = composing && host::with(|h| h.engine.expression_mode()).unwrap_or(false);
@@ -173,8 +179,7 @@ impl QingjianInputController {
             if composing {
                 self.commit_raw(client);
             }
-            host::with(|h| h.engine.note_passthrough(c));
-            return false;
+            return self.pass_through(c, client);
         }
         if composing {
             match c {
@@ -207,6 +212,10 @@ impl QingjianInputController {
                 }
             }
         }
+        // 数字与字母的自动空格要在 punctuate 之前判：它转不了时清掉上屏记录，之后就不知道上文了
+        let lead = c.is_ascii_alphanumeric()
+            && host::with(|h| h.engine.auto_space_before(c.encode_utf8(&mut [0; 4])))
+                .unwrap_or(false);
         // 中文模式下的全角标点；转不了的（数字、字母以外的其他键）原样交给应用
         match host::with(|h| h.engine.punctuate(c)).flatten() {
             Some(full_width) => {
@@ -215,8 +224,25 @@ impl QingjianInputController {
             }
             None => {
                 host::with(|h| h.engine.note_passthrough(c));
-                false
+                if lead {
+                    client.insert_text(&format!(" {c}"));
+                }
+                lead
             }
         }
+    }
+
+    /// 字符原样交给应用（返回 false）；开了自动空格且与上文是中西文交界时改由我们连同空格一起插入（返回 true）。
+    fn pass_through(&self, c: char, client: TextClient<'_>) -> bool {
+        let lead = host::with(|h| {
+            let lead = h.engine.auto_space_before(c.encode_utf8(&mut [0; 4]));
+            h.engine.note_passthrough(c);
+            lead
+        })
+        .unwrap_or(false);
+        if lead {
+            client.insert_text(&format!(" {c}"));
+        }
+        lead
     }
 }

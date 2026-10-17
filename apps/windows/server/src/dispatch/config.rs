@@ -1,3 +1,4 @@
+use qingjian_core::TraditionalVariant;
 use qingjian_platform::protocol::KeyModifiers;
 use qingjian_platform::{
     Appearance, AppsConfig, CandidateRenderer, Config, HighlightKeys, KeyCombo, LayoutMode,
@@ -15,12 +16,21 @@ pub struct RouterConfig {
     /// 云端候选在第一页预留的格数（`[predict] slots`）。
     pub cloud_slots: usize,
 
+    /// 是否请求云端候选词和整句补全（`[predict] enabled`）。
+    pub cloud_enabled: bool,
+
+    /// 本地整句候选是否异步请求译文（`[predict] sentence_translation`）。
+    pub sentence_translation: bool,
+
     /// 中文模式下 Shift+字母收进组句缓冲区（`[general] shift_letter = "compose"`）。
     /// 关着（缺省）时壳把大写字母交给应用，与以前一致。
     pub shift_letter_compose: bool,
 
     /// 候选排布（`[general] layout`）。
     pub layout: LayoutMode,
+
+    /// 横排时上 / 下键把单行展开成多行矩阵（`[general] horizontal_grid`）。
+    pub horizontal_grid: bool,
 
     /// 候选窗口外观（`[general] appearance`，兼容旧写法见 [`qingjian_platform::GeneralConfig::appearance`]）。
     pub appearance: Appearance,
@@ -108,6 +118,9 @@ pub struct RouterConfig {
     /// 「翻译选中文字」快捷键（`[shortcut] translate_selection`）。
     pub translate_selection: KeyCombo,
 
+    /// 组句中按需调用 AI 的快捷键（`[shortcut] predict`）。
+    pub predict: KeyCombo,
+
     /// 悬浮状态条开关（`[status_bar] enabled`）。
     pub status_enabled: bool,
 
@@ -120,7 +133,7 @@ pub struct RouterConfig {
     /// 形码侧开没开（`[general] wubi`）。与拼音同时开着就是混输。
     pub wubi: bool,
 
-    /// 繁体输出（`[general] traditional`），给候选窗口主题显示简 / 繁。
+    /// 繁体输出（`[general] traditional_variant`），给候选窗口主题显示简 / 繁。
     pub traditional: bool,
 
     /// 辅码触发键（`[general] aux_code_key`，缺省 `;`）；非法值退回缺省。
@@ -128,12 +141,20 @@ pub struct RouterConfig {
 
     /// 候选上是否显示辅码（`[general] aux_code_show`）。随帧下发给候选窗。
     pub aux_code_show: bool,
+
+    /// 译词旁是否显示词性标注（`[general] translation_pos`）。随帧下发给候选窗。
+    pub translation_pos: bool,
 }
 
 impl RouterConfig {
     /// 全局开关开着，且应用在 `[apps] english_candidates_on` 白名单里；没报应用名按不给。
     pub fn english_candidates_in(&self, app: Option<&str>) -> bool {
         self.english_candidates && self.apps.english_candidates_on(app)
+    }
+
+    /// 横排矩阵这套按键是否生效：开关开着（`[general] horizontal_grid`）而且排布是横排。
+    pub fn grid_keys(&self) -> bool {
+        self.horizontal_grid && self.layout == LayoutMode::Horizontal
     }
 
     /// 交给 UI 线程的画法。
@@ -157,8 +178,11 @@ impl From<&Config> for RouterConfig {
         Self {
             page_size: config.general.page_size(),
             cloud_slots: config.predict.slots,
+            cloud_enabled: config.predict.enabled,
+            sentence_translation: config.predict.sentence_translation,
             shift_letter_compose: config.general.shift_letter.compose(),
             layout: config.general.layout,
+            horizontal_grid: config.general.horizontal_grid,
             appearance: config.general.appearance(),
             renderer: config.general.renderer,
             font: config.general.font.trim().to_owned(),
@@ -201,13 +225,15 @@ impl From<&Config> for RouterConfig {
             },
             delete_keys: config.shortcut.delete_keys().into(),
             translate_selection: config.shortcut.translate_selection,
+            predict: config.shortcut.predict,
             status_enabled: config.status_bar.enabled,
             status_pos: config.status_bar.x.zip(config.status_bar.y),
             scheme: config.general.scheme(),
             wubi: config.general.wubi(),
-            traditional: config.general.traditional,
+            traditional: config.general.traditional() != TraditionalVariant::Off,
             aux_code_key: config.general.aux_code_key(),
             aux_code_show: config.general.aux_code_show,
+            translation_pos: config.general.translation_pos,
         }
     }
 }
