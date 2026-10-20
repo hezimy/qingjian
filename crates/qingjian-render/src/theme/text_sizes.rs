@@ -7,6 +7,8 @@
 
 use bamboo_slip::{Color, FontSpec, FontWeight};
 
+use super::file::color::parse_hex;
+
 /// 候选窗里的一种文字。设置里三处各记一份覆盖。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Role {
@@ -65,15 +67,52 @@ pub struct TextSizes {
     pub preedit_color: Option<Color>,
 }
 
+/// 这一处设置的字号：不是正数的当没填。
+fn positive(size: f32) -> Option<f32> {
+    (size.is_finite() && size > 0.0).then_some(size)
+}
+
+/// 这一处设置的字重：0 当没填。
+fn positive_weight(value: u16) -> Option<FontWeight> {
+    (value != 0).then_some(FontWeight(value))
+}
+
 impl TextSizes {
     /// 配置里的数：不是正数的当没填。字重与颜色留空（用主题的）。
     pub fn new(candidate: f32, annotation: f32) -> Self {
-        let positive = |size: f32| (size.is_finite() && size > 0.0).then_some(size);
         Self {
             candidate: positive(candidate),
             annotation: positive(annotation),
             ..Self::default()
         }
+    }
+
+    /// 补上序号字号：序号在设置界面里常与候选、译文并排，但只有盖过主题时才有值。
+    pub fn with_index(mut self, index: f32) -> Self {
+        self.index = positive(index);
+        self
+    }
+
+    /// 补上拼音行字号：与序号一样是绝对值，不跟候选字缩放。
+    pub fn with_preedit(mut self, preedit: f32) -> Self {
+        self.preedit = positive(preedit);
+        self
+    }
+
+    /// 补上三处的字重：0 表示没填（用主题的）。
+    pub fn with_weights(mut self, candidate: u16, annotation: u16, preedit: u16) -> Self {
+        self.candidate_weight = positive_weight(candidate);
+        self.annotation_weight = positive_weight(annotation);
+        self.preedit_weight = positive_weight(preedit);
+        self
+    }
+
+    /// 补上三处的颜色：空串或写得不对（不是 `#rrggbb[aa]`）当没填（用主题的）。
+    pub fn with_colors(mut self, candidate: &str, annotation: &str, preedit: &str) -> Self {
+        self.candidate_color = parse_hex(candidate);
+        self.annotation_color = parse_hex(annotation);
+        self.preedit_color = parse_hex(preedit);
+        self
     }
 
     /// 这一处设置的字重；没填返回 `None`。

@@ -127,10 +127,6 @@ impl StatusSink for UiHandle {
         open_settings();
     }
 
-    fn open_legacy_settings(&self) {
-        launch_sibling("qingjian-settings-legacy.exe");
-    }
-
     fn open_download(&self) {
         let _ = unsafe { AllowSetForegroundWindow(ASFW_ANY) };
         let opened = std::process::Command::new("explorer")

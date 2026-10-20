@@ -22,7 +22,7 @@ description: macOS 与 Windows 的安装步骤：系统要求、安装包、首�
 
 ## Windows
 
-**系统要求**：64 位 Windows 10（1809 或更新）或 Windows 11。安装包自带设置界面所需的运行时，不必另装组件。
+**系统要求**：64 位 Windows 10（1809 或更新）或 Windows 11。安装包自带全部所需组件，不必另装。
 
 1. 下载 `qingjian-<版本>-windows-x86_64-setup.exe`，双击安装，需要管理员权限。安装目录保持默认的 `C:\Program Files\Qingjian`，不要改到其他目录或其他盘：候选窗口要盖过开始菜单、任务栏搜索这类系统界面，靠的是 Windows 的 uiAccess 机制，系统只对装在 `%ProgramFiles%` 里的程序启用它，装到别处会静默失效。
 2. 测试版尚无正式的代码签名，SmartScreen 会拦截：点「更多信息 → 仍要运行」。

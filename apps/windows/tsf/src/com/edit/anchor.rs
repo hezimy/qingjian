@@ -5,9 +5,15 @@
 //! 一律折叠到起点再量（对齐 weasel），残片按上次的正常行高补回整行。
 //!
 //! WPS 文字（wps.exe）对组句范围**每个键**都报窗口右下角逐个像素（实测整个会话
-//! (2559,1399,2560,1399) 一动不动，候选窗因此死在屏幕右下角），`GetSelection` 也是空的、
-//! 连选区都没得量。这种值在 [`stabilize`] 里一律不采用，退到次锚点——系统光标
-//! （[`system_caret_rect`]，跟着真光标走），再不行才是鼠标。
+//! (2559,1399,2560,1399) 一动不动，候选窗因此死在屏幕右下角）。这种值在 [`stabilize`]
+//! 里一律不采用，退到次锚点——系统光标（[`system_caret_rect`]，跟着真光标走），再不行才是鼠标。
+//!
+//! 但 `GetSelection` 量出来的**也是同一个角落残片**（实测整个会话
+//! `候选锚点 来源=起点 rect=(2559,1399,2560,1399)`，一条「改用」日志都没有）：WPS 只有
+//! 「只在候选窗口」模式，没有组句范围，`stabilize` 的主锚点就是 [`caret_rect`] 量出来的
+//! 选区——[`caret_rect`] 原先信它，系统光标那条更可靠的路就永远轮不到，等于没有次锚点。
+//! 于是角落残片被当「上一次的正常位置」记进 `last_anchor`，之后每一键都退不出角落。所以
+//! 贴角的退化残片在 [`caret_rect`] 里一样不算数，且补整行前要先认出来（见 `repair_degenerate`）。
 //!
 //! 判「贴角」不只靠前台窗口：WPS 里 DLL 看到的 `GetForegroundWindow` 未必是输入焦点那个
 //! 窗口，拿不到就整条判定失效、退化残片被原样采用（`stabilize` 的「改用」日志一条也没有，
@@ -65,21 +71,33 @@ fn collapsed_rect(context: &ITfContext, ec: u32, range: &ITfRange) -> Option<REC
 }
 
 /// 插入点（没有选区时是光标，有选区时是选区）的屏幕矩形。「只在候选窗口」模式应用里不放 marked text，
-/// 没有组句范围可量，就用它给候选窗口定位。WPS 的 `GetSelection` 返回空，退到系统光标（见下）。
+/// 没有组句范围可量，就用它给候选窗口定位。
+///
+/// 选区量出来的**退化残片贴在工作区右下角时不算数**：WPS 的 `GetSelection` 不空，量出来
+/// 和组句范围报的是同一个假光标（框架头注释里的实测），采信它 [`stabilize`] 退来退去还是
+/// 那个角落——等于没有次锚点。放它过去，继续退到系统光标（跟着真光标走）、再退鼠标。
 pub(crate) fn caret_rect(context: &ITfContext, ec: u32) -> ScreenRect {
-    match selection_range(context, ec) {
-        Some(range) => anchor_rect(context, ec, &range),
-        None => match system_caret_rect() {
-            Some(rect) => {
-                crate::com::log::log(&format!(
-                    "候选锚点 次选=系统光标 rect=({},{},{},{})",
-                    rect.left, rect.top, rect.right, rect.bottom
-                ));
-                rect
-            }
-            None => mouse_screen_rect(),
-        },
+    let selected = selection_range(context, ec).map(|range| anchor_rect(context, ec, &range));
+    if let Some(rect) = selected.filter(|rect| usable_caret(*rect)) {
+        return rect;
     }
+    match system_caret_rect() {
+        Some(rect) => {
+            crate::com::log::log(&format!(
+                "候选锚点 次选=系统光标 rect=({},{},{},{})",
+                rect.left, rect.top, rect.right, rect.bottom
+            ));
+            rect
+        }
+        None => mouse_screen_rect(),
+    }
+}
+
+/// 选区量出来的锚点能不能当插入点用。WPS 的 `GetSelection` 量出来贴着工作区右下角，和组句
+/// 范围报的是同一个退化残片，采信它 [`stabilize`] 就退不出角落（等于没有次锚点，见 [`caret_rect`]）。
+/// 单独拎成函数是为了让回归测试能直接跑这条判定：真跑 [`caret_rect`] 要 TSF 上下文。
+fn usable_caret(rect: ScreenRect) -> bool {
+    !cornerish(rect, None)
 }
 
 /// 系统光标（`GetGUIThreadInfo` 的 `rcCaret`）的屏幕矩形：TSF 选区量不到时的真光标位置。
@@ -153,6 +171,12 @@ fn repair_degenerate(rect: &mut RECT) -> bool {
     let height = rect.bottom - rect.top;
     if (MIN_LINE_HEIGHT..=MAX_LINE_HEIGHT).contains(&height) {
         LAST_LINE_HEIGHT.store(height, Ordering::Relaxed);
+        return false;
+    }
+    // WPS 报的假光标是贴在显示器**工作区**右下角的退化残片（宽 ≤2 高 ≤2，正是它的 1×0）。
+    // 按上次的行高补整行，它就成了普通的一行高光标，贴角判定（`cornerish_at_work_area` 只认
+    // 退化矩形）再也认不出来，残片被原样采用、候选窗死在右下角——所以这类残片一律不补。
+    if cornerish(to_screen(*rect), None) {
         return false;
     }
     let remembered = LAST_LINE_HEIGHT.load(Ordering::Relaxed);
@@ -505,5 +529,57 @@ mod tests {
         let work = screen(0, 0, 2560, 1400);
         let fragment = screen(430, 390, 431, 390);
         assert!(!cornerish_at_work_area(fragment, work));
+    }
+
+    /// WPS 报的假光标形状：显示器工作区右下角那个 1×0 残片（实测 (2559,1399,2560,1399)，
+    /// 工作区右下角 (2560,1400)）。工作区取自本机真实显示器，换机器这条判据也成立。
+    fn work_area_corner_fragment() -> ScreenRect {
+        let work = to_screen(work_area_near(POINT { x: 0, y: 0 }));
+        screen(work.right - 1, work.bottom - 1, work.right, work.bottom - 1)
+    }
+
+    // 回归（WPS 实测，2026-10-19 日志：整个会话 `来源=起点 rect=(2559,1399,2560,1399)`、
+    // 一条「改用」都没有）：`GetSelection` 不空，量出来和组句范围报的是同一个角落残片。
+    // 这种值当插入点采信，`caret_rect` 就把系统光标那条更可靠的路挡掉了——等于没有次锚点，
+    // `stabilize` 退来退去还是角落。所以它必须被 `usable_caret` 判掉，退到系统光标 / 鼠标。
+    #[test]
+    fn wps_corner_fragment_is_not_usable_as_the_insertion_point() {
+        let fragment = work_area_corner_fragment();
+        assert!(cornerish(fragment, None)); // 真实工作区，不靠窗口矩形
+        assert!(!usable_caret(fragment));
+        assert!(usable_caret(caret_at(430, 390))); // 正常的一行高光标照用
+    }
+
+    // 回归：角落残片不许补整行——补了就是一行高的普通光标，贴角判定（只认宽 ≤2 高 ≤2）
+    // 再也认不出来，残片被原样采用、候选窗死在右下角。微信那种不在角落的残片照旧补。
+    #[test]
+    fn a_corner_fragment_is_never_repaired() {
+        let _serial = serial();
+        let fragment = work_area_corner_fragment();
+        let mut raw = RECT {
+            left: fragment.left,
+            top: fragment.top,
+            right: fragment.right,
+            bottom: fragment.bottom,
+        };
+        LAST_LINE_HEIGHT.store(0, Ordering::Relaxed);
+        let mut first = rect(1062, 1082); // 先记下一次正常行高（微信首键形状）
+        assert!(!repair_degenerate(&mut first));
+        assert!(!repair_degenerate(&mut raw)); // 角落残片不补
+        assert_eq!(raw.bottom - raw.top, 0);
+        LAST_LINE_HEIGHT.store(0, Ordering::Relaxed);
+    }
+
+    // 回归（WPS 实测形状）：全在「只在候选窗口」模式，没有组句范围，窗口矩形也是 `None`
+    // （`GetForegroundWindow` 拿不到输入焦点那个窗口）。没修时主锚点就是角落残片、次锚点无、
+    // 上一次无，`stabilize` 只好采用角落——候选窗死在右下角；修好后 `caret_rect` 不采信残片，
+    // 交给系统光标 / 鼠标，`stabilize` 也就跟着真光标走。
+    #[test]
+    fn wps_shape_without_a_window_no_longer_dead_ends_in_the_corner() {
+        let corner = work_area_corner_fragment();
+        let caret = caret_at(430, 390);
+        assert_eq!(stabilize(None, corner, None, None), corner); // 修前的死路
+        assert!(!usable_caret(corner));
+        assert_eq!(stabilize(None, caret, None, None), caret); // 修后跟着真光标
     }
 }

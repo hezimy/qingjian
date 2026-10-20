@@ -13,14 +13,14 @@ members = [
     "crates/qingjian-render",
     "crates/bamboo-slip",
     "crates/qingjian-update",
-    "apps/linux/server", "apps/cli", "apps/settings", "apps/macos", "apps/windows/server", "apps/windows/tsf", "apps/windows/settings", "tools/dict-convert", "tools/gloss-gen", "tools/release-sign",
+    "apps/linux/server", "apps/cli", "apps/settings", "apps/macos", "apps/windows/server", "apps/windows/tsf", "tools/dict-convert", "tools/gloss-gen", "tools/release-sign",
 ]
 
 [workspace.package]
 version = "0.1.1"
 edition = "2024"
 license = "GPL-3.0-or-later"
-repository = "https://github.com/qingjian-team/qingjian"
+repository = "https://github.com/hezimy/qingjian"
 
 [workspace.lints.clippy]
 all = "warn"
@@ -106,7 +106,7 @@ objc2-core-foundation = { version = "0.3.2", features = ["CFArray", "CFBase", "C
 embed-manifest = "1.4.0"
 windows-registry = "0.6.1"
 
-# cosmic-text 加了 opsz 光学字号支持（FontSystem::set_optical_size），补丁在 qingjian-team 的 fork，分支 qingjian-opsz 基于 0.19.0；
+# cosmic-text 加了 opsz 光学字号支持（FontSystem::set_optical_size），补丁在上游组织 qingjian-team 的 fork，分支 qingjian-opsz 基于 0.19.0；
 # 上游收了就删掉这段回 crates.io。见 docs/design/rendering.md
 [patch.crates-io]
 cosmic-text = { git = "https://github.com/qingjian-team/cosmic-text", rev = "9cf0d65a5e4db381e34907103326673386096be3" }

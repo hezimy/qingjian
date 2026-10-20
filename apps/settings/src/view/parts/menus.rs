@@ -7,14 +7,12 @@ use qingjian_platform::{EmojiCount, Scheme};
 
 use crate::message::{Message, Popup};
 use crate::view::Page;
-use crate::view::parts::controls::LANGUAGES;
 
 /// 下拉框的本地名，菜单靠它找位置。
 pub fn anchor(popup: Popup) -> &'static str {
     match popup {
         Popup::Font => "font",
         Popup::Scheme => "scheme",
-        Popup::LearningLanguage => "learning-language",
         Popup::Traditional => "traditional",
         Popup::Emoji => "emoji",
         Popup::Kaomoji => "kaomoji",
@@ -66,22 +64,6 @@ pub fn menu(
                     Scheme::ALL.iter().position(|scheme| *scheme == current),
                 )
             }
-            Popup::LearningLanguage => (
-                "learning_language",
-                LANGUAGES
-                    .iter()
-                    .map(|(_, label)| (*label).to_owned())
-                    .collect(),
-                strings(
-                    LANGUAGES
-                        .iter()
-                        .map(|(code, _)| (*code).to_owned())
-                        .collect(),
-                ),
-                LANGUAGES
-                    .iter()
-                    .position(|(code, _)| *code == general.learning_language),
-            ),
             Popup::Traditional => {
                 let current = general.traditional();
                 (

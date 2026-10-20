@@ -49,7 +49,7 @@ const SOURCES: [(&str, &str); 8] = [
     ),
 ];
 
-const PRIVACY: &str = "青简不上传任何数据。开着「自动检查更新」时每天向官网读一次版本列表，请求不带任何标识。开着云联想或翻译时，光标附近的文字与拼音会发给你在「云服务」页填的 AI 服务商的服务器，不经过作者。输入日志只写在这台电脑上，可以在「高级」页关掉或清空。";
+const PRIVACY: &str = "青简不上传任何数据。开着「自动检查更新」时每天向项目主页读一次版本列表，请求不带任何标识。开着云联想或翻译时，光标附近的文字与拼音会发给你在「云服务」页填的 AI 服务商的服务器，不经过作者。输入日志只写在这台电脑上，可以在「高级」页关掉或清空。";
 
 pub fn about(ui: &mut Ui<Message>, page: &Page) -> Result<Vec<NodeId>, RenderError> {
     let theme = &page.theme;
@@ -78,7 +78,7 @@ pub fn about(ui: &mut Ui<Message>, page: &Page) -> Result<Vec<NodeId>, RenderErr
             ui,
             page,
             "自动检查更新",
-            Some("每天向官网读一次版本列表，有新版在这里和菜单里提示，不会自动下载安装"),
+            Some("每天向项目主页读一次版本列表，有新版在这里和菜单里提示，不会自动下载安装"),
             ("update", "check"),
             update.check,
             false,
@@ -147,7 +147,7 @@ pub fn about(ui: &mut Ui<Message>, page: &Page) -> Result<Vec<NodeId>, RenderErr
     Ok(out)
 }
 
-/// logo、「青简」、版本，右边官网与 GitHub。
+/// logo、「青简」、版本，右边项目主页与 GitHub。
 fn header(ui: &mut Ui<Message>, page: &Page) -> Result<NodeId, RenderError> {
     let theme = &page.theme;
     let mut brand = Vec::new();
@@ -220,8 +220,8 @@ fn header(ui: &mut Ui<Message>, page: &Page) -> Result<NodeId, RenderError> {
         ui,
         page,
         &[
-            ("官网", Action::OpenWebsite),
-            ("GitHub", Action::OpenRepository),
+            ("项目主页", Action::OpenWebsite),
+            ("问题反馈", Action::OpenRepository),
         ],
     )?;
     ui.scene().node(

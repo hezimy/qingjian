@@ -17,7 +17,7 @@ use std::sync::Arc;
 
 use bamboo_slip::{FamilyId, SvgImage, TextEdit, Waker};
 use qingjian_platform::{Appearance, Config, ConfigError};
-use qingjian_render::{TextSizes, Theme, ThemeLibrary};
+use qingjian_render::{TextSizes, Theme, ThemeLibrary, parse_hex};
 
 use crate::jobs::cloud_test::CloudTest;
 use crate::jobs::import::ImportJob;
@@ -128,6 +128,43 @@ impl Settings {
         self.ctrl_space = system_ctrl_space();
     }
 
+    /// 勾 / 去掉一门学习语言。`code` 是语言代码，`"off"` 是「不显示译文」。
+    /// 最多两种：勾满两种后再勾一门就挤掉最早勾的那门；一门都不剩写回 `off`。
+    fn set_learning_language(&mut self, code: &str, on: bool) {
+        if code == "off" {
+            if on {
+                self.write("general", "learning_language", "off");
+                self.write("general", "learning_language_2", "");
+            }
+            return;
+        }
+        let mut selected = Vec::new();
+        if !self.config.general.learning_language_off() {
+            selected.push(self.config.general.learning_language.trim().to_owned());
+            if let Some(language) = self.config.general.secondary_learning_language() {
+                selected.push(language.code().to_owned());
+            }
+        }
+        if on {
+            if !selected.iter().any(|item| item == code) {
+                if selected.len() >= 2 {
+                    selected.remove(0);
+                }
+                selected.push(code.to_owned());
+            }
+        } else {
+            selected.retain(|item| item != code);
+        }
+        if selected.is_empty() {
+            self.write("general", "learning_language", "off");
+            self.write("general", "learning_language_2", "");
+        } else {
+            let second = selected.get(1).cloned().unwrap_or_default();
+            self.write("general", "learning_language", selected[0].clone());
+            self.write("general", "learning_language_2", second);
+        }
+    }
+
     pub fn load(path: PathBuf) -> Result<Self, ConfigError> {
         // macOS 偏好设置以前把密钥写在配置同目录的 .env 里，读进环境才知道密钥设没设、测试连接也用得上
         let _ = dotenvy::from_path(path.with_file_name(".env"));
@@ -181,15 +218,32 @@ impl Settings {
         }
     }
 
-    /// 当前主题，按外观与设置里的字号换好。
+    /// 当前主题，按外观与设置里的字号、字重、颜色换好。
     pub fn theme(&self, id: &str) -> Theme {
         let general = &self.config.general;
         self.themes
             .resolve(id, self.candidate_dark())
-            .with_text_sizes(TextSizes::new(
-                general.candidate_font_size.0,
-                general.annotation_font_size.0,
-            ))
+            .with_text_sizes(
+                TextSizes::new(
+                    general.candidate_font_size.0,
+                    general.annotation_font_size.0,
+                )
+                .with_index(general.index_font_size.0)
+                .with_preedit(general.input_font_size.0)
+                .with_weights(
+                    general.candidate_weight,
+                    general.annotation_weight,
+                    general.input_weight,
+                )
+                .with_colors(
+                    &general.candidate_color,
+                    &general.annotation_color,
+                    &general.input_color,
+                ),
+            )
+            // 窗口底色与高亮底色分别盖过主题的 `surface` / `accent`，空或写得不对用主题的
+            .with_highlight(parse_hex(&general.highlight_color))
+            .with_surface(parse_hex(&general.surface_color))
     }
 
     /// 字号框里显示的数：设置里写了用它，没写用主题的。
@@ -198,9 +252,23 @@ impl Settings {
         let (own, name) = match kind {
             SizeKind::Candidate => (general.candidate_font_size, "candidate"),
             SizeKind::Annotation => (general.annotation_font_size, "annotation"),
+            SizeKind::Index => (general.index_font_size, "index"),
+            SizeKind::Input => (general.input_font_size, "preedit"),
         };
         own.get()
             .or_else(|| self.theme(general.theme_id()).theme_size(name))
             .unwrap_or(13.0)
+    }
+
+    /// 字重框里显示的数：0 表示跟随主题。字重只有候选 / 译文 / 拼音行三处，序号没有独立字重，
+    /// 字重控件也不会为序号建出来；真问到时按候选的返回，不 panic。
+    pub fn weight(&self, kind: SizeKind) -> u16 {
+        let general = &self.config.general;
+        match kind {
+            SizeKind::Candidate => general.candidate_weight,
+            SizeKind::Annotation => general.annotation_weight,
+            SizeKind::Input => general.input_weight,
+            SizeKind::Index => general.candidate_weight,
+        }
     }
 }

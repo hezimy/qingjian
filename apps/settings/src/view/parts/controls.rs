@@ -7,14 +7,13 @@ use super::menus::anchor;
 use crate::message::{Message, Popup};
 use crate::view::Page;
 
-/// 学习语言（配置写法、界面名），最后一项是不显示译文。
-pub const LANGUAGES: [(&str, &str); 6] = [
+/// 学习语言（配置写法、界面名）。能不能同时学两门由设置界面决定，「不显示译文」不算语言，单独一个勾选框。
+pub const LANGUAGES: [(&str, &str); 5] = [
     ("en", "英语"),
     ("ja", "日语"),
     ("es", "西班牙语"),
     ("vi", "越南语"),
     ("de", "德语"),
-    (qingjian_platform::LEARNING_LANGUAGE_OFF, "不显示"),
 ];
 
 /// 一行开关：拨一下把 `[section] key` 写成相反的值。

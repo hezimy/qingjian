@@ -8,7 +8,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 LOCK="$ROOT/tools/release/data.lock"
 OUT="$ROOT/target/release-data"
-REPO="qingjian-team/qingjian"
+# 本 fork 的产品数据包挂在自己的 Release 上（上游是 qingjian-team/qingjian）。
+REPO="hezimy/qingjian"
 ASSETS=(qingjian-data.tar.gz)
 cd "$ROOT"
 

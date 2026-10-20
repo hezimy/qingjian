@@ -11,7 +11,7 @@ const THEME: &str = r##"{
     "components": {
         "cell": { "type": "frame", "padding": 4, "children": [
             { "type": "text", "bind": "text", "font": "candidate", "color": "@text" },
-            { "type": "icon", "icon": "gear", "when": "gear", "size": 12, "color": "@gloss" }
+            { "type": "icon", "icon": "leaf", "when": "gear", "size": 12, "color": "@gloss" }
         ] },
         "status-item": { "type": "frame", "children": [
             { "type": "frame", "width": 10, "height": 10, "when": "!first", "fill": { "image": "images/dot.svg" } },

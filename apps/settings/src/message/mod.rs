@@ -29,6 +29,8 @@ pub enum Message {
     CloseMenu,
     Size(SizeKind, i32),
     ResetSizes,
+    /// 勾上或去掉一门学习语言（`"off"` 是「不显示译文」）。最多两门。
+    LearnLanguage(&'static str, bool),
     Run(Action),
     /// 输入框里的一次编辑（打字、挪光标、输入法组字）。
     Edit(FieldId, Edit),

@@ -4,6 +4,7 @@ mod reference;
 mod spec;
 mod value;
 
-pub(crate) use reference::{ColorRef, parse_hex};
+pub(crate) use reference::ColorRef;
+pub use reference::parse_hex;
 pub(crate) use spec::ColorSpec;
 pub(crate) use value::ColorValue;

@@ -1,7 +1,7 @@
 //! 「候选」页：每页几个、译文、输出字形，候选后面的 emoji / 颜文字 / 符号，排序（学习、本地整句模型），英文词。
 
-use bamboo_slip::taffy::NodeId;
-use bamboo_slip::{RenderError, SettingRow, Stepper, Ui, group, section_title};
+use bamboo_slip::taffy::{FlexDirection, NodeId, Style};
+use bamboo_slip::{Checkbox, RenderError, SettingRow, Stepper, Ui, Visual, group, section_title};
 use qingjian_core::TraditionalVariant;
 use qingjian_platform::{EmojiCount, MAX_PAGE_SIZE};
 
@@ -25,19 +25,7 @@ pub fn candidates(ui: &mut Ui<Message>, page: &Page) -> Result<Vec<NodeId>, Rend
             Message::set("general", "page_size", (size - 1) as i64),
             Message::set("general", "page_size", (size + 1) as i64),
         )?;
-    let language = LANGUAGES
-        .iter()
-        .find(|(code, _)| *code == general.learning_language)
-        .map_or(general.learning_language.as_str(), |(_, label)| label);
-    let names: Vec<&str> = LANGUAGES.iter().map(|(_, name)| *name).collect();
-    let language = select(
-        ui,
-        page,
-        Popup::LearningLanguage,
-        (language, &names),
-        120.0,
-        false,
-    )?;
+    let language = learning_languages(ui, page)?;
     let traditional = select(
         ui,
         page,
@@ -73,6 +61,20 @@ pub fn candidates(ui: &mut Ui<Message>, page: &Page) -> Result<Vec<NodeId>, Rend
                 ("general", "translation_pos"),
                 general.translation_pos,
                 general.learning_language_off(),
+            )?,
+        );
+    }
+    // 熟词动态标灰也只有 Windows 候选窗读它（macOS / Linux 的候选窗还没接），别的平台上显示也没用
+    if cfg!(target_os = "windows") {
+        rows.push(
+            toggle_info(
+                ui,
+                page,
+                "熟词动态标灰",
+                Some("看过的轮次还不到 3 轮的译词算生词，看过 3 轮以上算熟词。开着：熟词用译文颜色（灰），生词用主题的醒目色（青简绿、护眼绿是橙 #FF8D28）；关掉：熟词不标灰，所有译文都用这个醒目色，一屏全标出来。"),
+                ("general", "fresh_words"),
+                general.fresh_words,
+                false,
             )?,
         );
     }
@@ -153,6 +155,52 @@ pub fn candidates(ui: &mut Ui<Message>, page: &Page) -> Result<Vec<NodeId>, Rend
     out.push(section_title(ui, theme, "英文词")?);
     out.push(group(ui, theme, &rows)?);
     Ok(out)
+}
+
+/// 学习语言的两行勾选框：第一行「不显示译文」与头两门语言，第二行其余三门。
+/// 最多勾两门，勾满后没勾的置灰；一门都不勾写回「不显示译文」。
+fn learning_languages(ui: &mut Ui<Message>, page: &Page) -> Result<NodeId, RenderError> {
+    let general = &page.settings.config.general;
+    let off = general.learning_language_off();
+    let mut selected: Vec<String> = Vec::new();
+    if !off {
+        selected.push(general.learning_language.trim().to_owned());
+        if let Some(language) = general.secondary_learning_language() {
+            selected.push(language.code().to_owned());
+        }
+    }
+    let full = selected.len() >= 2;
+    let mut boxes = vec![Checkbox::new(off, "不显示译文").build(
+        ui,
+        &page.theme,
+        "learning-off",
+        Message::LearnLanguage(qingjian_platform::LEARNING_LANGUAGE_OFF, !off),
+    )?];
+    for (code, label) in LANGUAGES {
+        let on = selected.iter().any(|item| item == code);
+        boxes.push(Checkbox::new(on, label).disabled(!on && full).build(
+            ui,
+            &page.theme,
+            ("learning-language", code),
+            Message::LearnLanguage(code, !on),
+        )?);
+    }
+    let style = Style {
+        flex_direction: FlexDirection::Row,
+        gap: page.gap(16.0),
+        ..Style::default()
+    };
+    let top = ui.scene().node(style.clone(), Visual::Group, &boxes[..3])?;
+    let bottom = ui.scene().node(style, Visual::Group, &boxes[3..])?;
+    ui.scene().node(
+        Style {
+            flex_direction: FlexDirection::Column,
+            gap: page.gap(8.0),
+            ..Style::default()
+        },
+        Visual::Group,
+        &[top, bottom],
+    )
 }
 
 /// 候选后面一次最多配几个：不显示、1–3 个。

@@ -117,7 +117,7 @@ scheme = "pinyin"   # pinyin | xiaohe | ziranma | microsoft | sogou | zhuyin | w
 | Core | `engine/mod.rs` 的 `shuangpin` 与 `zhuyin` 收敛为一个字段；`engine/setup.rs:20-33` 的 setter 合并；阶段 1 已加的 `code: Option<CodeTable>` 改为随 `scheme` 装载（哪个码表由配置决定，Core 不需要 `CodeScheme` 枚举） |
 | 配置 | `crates/qingjian-platform/src/config/general.rs:50-97` |
 | CLI | `apps/cli/src/args.rs:76` 加 `--wubi`；`apps/cli/src/main.rs:236-250` 应用；回放 `apps/cli/src/replay/mod.rs:95-116` 认新 scheme |
-| Windows 设置 | `apps/windows/settings/src/panel/pages/general.rs:14-20` 的 `SHUANGPIN` 列表扩成「输入方案」；`panel/message.rs:12-13`、`panel/component.rs:41-44` |
+| Windows 设置 | `apps/settings/src/view/pages/input.rs` 的「方案」组扩成「输入方案」 |
 | Windows Server | `server/src/main.rs:188-189` 启动应用；`dispatch/reload/mod.rs:107-108` 热加载；状态条 `dispatch/status/mod.rs:93-99` 用 `scheme.label()` |
 | macOS | **本期不动**。顺带记一笔：`apps/macos` 至今没有接注音（全目录无 `set_zhuyin_mode` 引用），mac 接方案时要把注音一起补上 |
 

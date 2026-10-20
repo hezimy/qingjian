@@ -188,13 +188,18 @@ impl App for Settings {
                 let key = match kind {
                     SizeKind::Candidate => "candidate_font_size",
                     SizeKind::Annotation => "annotation_font_size",
+                    SizeKind::Index => "index_font_size",
+                    SizeKind::Input => "input_font_size",
                 };
                 self.write("general", key, f64::from(value));
             }
             Message::ResetSizes => {
                 self.write("general", "candidate_font_size", 0.0);
                 self.write("general", "annotation_font_size", 0.0);
+                self.write("general", "index_font_size", 0.0);
+                self.write("general", "input_font_size", 0.0);
             }
+            Message::LearnLanguage(code, on) => self.set_learning_language(code, on),
             Message::Run(action) => {
                 // 清空要点两下：第一下只是把按钮换成确认
                 if action == Action::ClearInputLog && armed != Some(action) {

@@ -20,6 +20,11 @@ impl Settings {
             FieldId::BaseUrl => predict.base_url.clone(),
             FieldId::Model => predict.model.clone(),
             FieldId::ApiKey => String::new(),
+            FieldId::CandidateColor => self.config.general.candidate_color.trim().to_owned(),
+            FieldId::AnnotationColor => self.config.general.annotation_color.trim().to_owned(),
+            FieldId::InputColor => self.config.general.input_color.trim().to_owned(),
+            FieldId::SurfaceColor => self.config.general.surface_color.trim().to_owned(),
+            FieldId::HighlightColor => self.config.general.highlight_color.trim().to_owned(),
             FieldId::VocabularySearch => String::new(),
             FieldId::PhraseCode | FieldId::PhraseText => return,
         };
@@ -43,6 +48,23 @@ impl Settings {
                 };
                 if !text.is_empty() && text != *current {
                     self.write("predict", id.key(), text);
+                }
+            }
+            // 颜色空串有意义（空 = 用主题色），与上面的服务项不同：只要和配置里的值不一样就写
+            FieldId::CandidateColor
+            | FieldId::AnnotationColor
+            | FieldId::InputColor
+            | FieldId::SurfaceColor
+            | FieldId::HighlightColor => {
+                let current = match id {
+                    FieldId::CandidateColor => &self.config.general.candidate_color,
+                    FieldId::AnnotationColor => &self.config.general.annotation_color,
+                    FieldId::InputColor => &self.config.general.input_color,
+                    FieldId::SurfaceColor => &self.config.general.surface_color,
+                    _ => &self.config.general.highlight_color,
+                };
+                if text != current.trim() {
+                    self.write("general", id.key(), text);
                 }
             }
             FieldId::PhraseCode | FieldId::PhraseText | FieldId::VocabularySearch => return,

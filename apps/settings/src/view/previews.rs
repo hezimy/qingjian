@@ -6,8 +6,8 @@ use std::sync::Arc;
 use bamboo_slip::FontLibrary;
 use qingjian_render::{Frame, Layout, Pixmap, Renderer, Theme, sample};
 
-/// 一张预览的参数：主题 id、深色、排布、显示几个候选、倍数与字号（位模式）。
-type PreviewKey = (String, bool, bool, usize, u32, [u32; 2]);
+/// 一张预览的参数：主题 id、深色、排布、显示几个候选、倍数、字号（位模式）与五个颜色覆盖（配置原值）。
+type PreviewKey = (String, bool, bool, usize, u32, [u32; 2], [String; 5]);
 
 pub struct Previews {
     renderer: Option<Renderer>,
@@ -30,7 +30,8 @@ impl Previews {
         }
     }
 
-    /// `theme` 已换好外观与字号；`dark` 只用来区分缓存。画不出来时为 `None`。
+    /// `theme` 已换好外观、字号与颜色；`dark`、`sizes`、`colors` 只用来区分缓存。画不出来时为 `None`。
+    #[allow(clippy::too_many_arguments)]
     pub fn get(
         &mut self,
         theme: &Theme,
@@ -39,6 +40,7 @@ impl Previews {
         rows: usize,
         scale: f32,
         sizes: [f32; 2],
+        colors: [&str; 5],
     ) -> Option<Arc<Pixmap>> {
         let key = (
             theme.id().to_owned(),
@@ -47,6 +49,7 @@ impl Previews {
             rows,
             scale.to_bits(),
             sizes.map(f32::to_bits),
+            colors.map(str::to_owned),
         );
         if let Some(pixmap) = self.cache.get(&key) {
             return Some(Arc::clone(pixmap));
@@ -87,15 +90,16 @@ impl Previews {
         rows: usize,
         scale: f32,
         sizes: [f32; 2],
+        colors: [&str; 5],
         fit: (f32, f32),
     ) -> Option<Arc<Pixmap>> {
-        let full = self.get(theme, dark, horizontal, rows, scale, sizes)?;
+        let full = self.get(theme, dark, horizontal, rows, scale, sizes, colors)?;
         let ratio = (fit.0 / full.width() as f32).min(fit.1 / full.height() as f32);
         if ratio >= 1.0 {
             return Some(full);
         }
         let ratio = ((ratio * 20.0).floor() / 20.0).max(0.05);
-        self.get(theme, dark, horizontal, rows, scale * ratio, sizes)
+        self.get(theme, dark, horizontal, rows, scale * ratio, sizes, colors)
     }
 }
 

@@ -22,4 +22,4 @@ pub use bamboo_slip::{
 pub use frame::{Frame, Mode, Preedit, PreeditSegment, PreeditStyle, Row, Tone};
 pub use layout::Layout;
 pub use renderer::{HitRegion, HitTarget, Rendered, RenderedStatus, Renderer, StatusCell};
-pub use theme::{TextSizes, Theme, ThemeError, ThemeLibrary};
+pub use theme::{TextSizes, Theme, ThemeError, ThemeLibrary, parse_hex};

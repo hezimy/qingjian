@@ -198,14 +198,14 @@ themes/
 
 ## 悬浮状态条（Windows）
 
-Windows 屏幕右下角的悬浮状态条也可以按主题画，写法与候选窗口相同：在 `status` 下写 `root`，格子用 `repeat` 绑定 `cells` 一格一格展开（现在是「中 / 英」「标点」「符号面板」「设置齿轮」四格，点哪格就是切换哪一项）：
+Windows 屏幕右下角的悬浮状态条也可以按主题画，写法与候选窗口相同：在 `status` 下写 `root`，格子用 `repeat` 绑定 `cells` 一格一格展开（现在是「中 / 英」「标点」「符号面板」「设置」四格，点哪格就是切换哪一项）：
 
 ```json
 "components": {
   "status-cell": { "type": "frame", "padding": [4, 8], "children": [
     { "type": "text", "bind": "text", "font": "candidate",
       "color": { "if": "emphasized", "then": "@cloud", "else": "@gloss" } },
-    { "type": "icon", "icon": "gear", "when": "gear", "size": 15, "color": "@gloss" }
+    { "type": "icon", "icon": "leaf", "when": "gear", "size": 15, "color": "@gloss" }
   ] }
 },
 "status": {
@@ -216,10 +216,10 @@ Windows 屏幕右下角的悬浮状态条也可以按主题画，写法与候选
 }
 ```
 
-- 每一格里可用：`text`（这一格的文字）、`emphasized`（当前生效的模式或全角标点）、`gear`（设置齿轮那一格）、`first` / `last`。
+- 每一格里可用：`text`（这一格的文字）、`emphasized`（当前生效的模式或全角标点）、`gear`（设置那一格）、`first` / `last`。
 - 整条状态条也能用「显示输入状态」里的 `mode.english` 等，自己决定画什么。
 - 格子之间可以夹装饰，点到装饰算前一格。
-- 不写 `root` 时状态条按原来的样子画，只用 `status` 里的颜色与尺寸（`background` 底、`separator` 格间细线、`normal` / `emphasized` 文字、`gear` 齿轮、`effects` 投影）。`effects` 留空或写 `[]` 就不画投影：这时长按拖动的范围与看到的那一条一样大，也能贴着任务栏边上停住。
+- 不写 `root` 时状态条按原来的样子画，只用 `status` 里的颜色与尺寸（`background` 底、`separator` 格间细线、`normal` / `emphasized` 文字、`gear` 设置那一格的树叶、`effects` 投影）。`effects` 留空或写 `[]` 就不画投影：这时长按拖动的范围与看到的那一条一样大，也能贴着任务栏边上停住。
 - 护眼绿就写了 `root`：底色浅灰绿，左上角加一枝枝叶，也不画投影——能贴着任务栏边上停住，长按拖动的范围与看到的那一条一样大。macOS 没有悬浮状态条。
 
 ## 过渡动画

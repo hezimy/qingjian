@@ -22,6 +22,7 @@ use bamboo_slip::tiny_skia::Pixmap;
 use bamboo_slip::{Color, FamilyTable, FontSpec, SvgImage};
 
 pub use error::ThemeError;
+pub use file::color::parse_hex;
 use font::FontFamilies;
 pub use library::ThemeLibrary;
 pub(crate) use text_sizes::Role;

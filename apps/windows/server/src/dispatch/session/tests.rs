@@ -65,7 +65,7 @@ fn hidden_count(sink: &Arc<RecordingSink>) -> usize {
 }
 
 #[test]
-fn hiding_candidates_clears_the_buffer_too() {
+fn hiding_candidates_keeps_the_buffer() {
     let sink = Arc::new(RecordingSink::default());
     let mut router = recording_router(&sink);
     compose(&mut router, "ni");
@@ -79,10 +79,28 @@ fn hiding_candidates_clears_the_buffer_too() {
     });
 
     assert!(
-        router.engine.composition().is_empty(),
-        "收窗要连缓冲一起清：只为收窗的话，这个会话不再发键时拼音就永远留着"
+        !router.engine.composition().is_empty(),
+        "收窗不能连缓冲一起清：DLL 每拍没候选就发一次收窗，清缓冲会把正打着的拼音抹掉"
     );
     assert!(hidden_count(&sink) > 0, "候选窗要被收起");
+}
+
+#[test]
+fn a_hide_between_two_keys_keeps_the_syllable() {
+    let sink = Arc::new(RecordingSink::default());
+    let mut router = recording_router(&sink);
+    compose(&mut router, "x");
+    // DLL 的轮询：`x` 还没成音节、这一帧没有候选，就发一次收窗。
+    router.handle(ClientMessage::HideCandidates {
+        session: SessionId(1),
+    });
+    compose(&mut router, "i");
+
+    assert_eq!(
+        router.engine.composition().text(),
+        "xi",
+        "收窗后接着打的字母要接上：清缓冲的话第二个字母会另起一段、原样上屏"
+    );
 }
 
 #[test]

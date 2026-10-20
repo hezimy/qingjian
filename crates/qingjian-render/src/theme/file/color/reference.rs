@@ -28,7 +28,7 @@ impl TryFrom<String> for ColorRef {
 }
 
 /// `#rrggbb` / `#rrggbbaa`。
-pub(crate) fn parse_hex(value: &str) -> Option<Color> {
+pub fn parse_hex(value: &str) -> Option<Color> {
     let hex = value.strip_prefix('#')?;
     if !matches!(hex.len(), 6 | 8) || !hex.is_ascii() {
         return None;

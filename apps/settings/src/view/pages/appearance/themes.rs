@@ -45,6 +45,14 @@ pub fn preview(ui: &mut Ui<Message>, page: &Page) -> Result<NodeId, RenderError>
             settings.size(SizeKind::Candidate),
             settings.size(SizeKind::Annotation),
         ],
+        // 五个颜色覆盖也进缓存键：改了颜色预览要跟着重画
+        [
+            general.candidate_color.as_str(),
+            general.annotation_color.as_str(),
+            general.input_color.as_str(),
+            general.surface_color.as_str(),
+            general.highlight_color.as_str(),
+        ],
         fit,
     );
     let mut children = Vec::new();
@@ -79,7 +87,8 @@ pub fn preview(ui: &mut Ui<Message>, page: &Page) -> Result<NodeId, RenderError>
 /// 各主题一张卡片：横排缩略图加名字，选中的描强调色边；点了换主题。
 pub fn cards(ui: &mut Ui<Message>, page: &Page) -> Result<NodeId, RenderError> {
     let settings = page.settings;
-    let current = settings.config.general.theme_id().to_owned();
+    let general = &settings.config.general;
+    let current = general.theme_id().to_owned();
     let colors = page.theme.colors;
     let (width, height) = tile_size(page);
     let zoom = width / page.px(TILE.0);
@@ -101,6 +110,14 @@ pub fn cards(ui: &mut Ui<Message>, page: &Page) -> Result<NodeId, RenderError> {
             3,
             page.scale * 0.5 * zoom,
             [0.0, 0.0],
+            // 五个颜色覆盖也进缓存键：改了颜色缩略图要跟着重画
+            [
+                general.candidate_color.as_str(),
+                general.annotation_color.as_str(),
+                general.input_color.as_str(),
+                general.surface_color.as_str(),
+                general.highlight_color.as_str(),
+            ],
             fit,
         );
         let mut tile_children = Vec::new();

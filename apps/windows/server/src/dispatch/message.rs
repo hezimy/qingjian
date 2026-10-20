@@ -78,10 +78,14 @@ impl Router {
                 None
             }
             ClientMessage::HideCandidates { session } => {
-                // 组句在 DLL 侧结束（应用终止组句 / 翻译评审失焦）：连缓冲一起清掉并收窗口，在飞的云联想与翻译评审
-                // 也一并取消。只收窗不清缓冲的话，这个会话不再发键时那段拼音就永远留在 Server 里。
+                // 组句在 DLL 侧结束（应用终止组句 / 翻译评审失焦）：只收窗口；缓冲留给下一键的 Commit 清。
+                // 这条也来自 DLL 的轮询——每拍只要这一帧没候选就发一次（刚敲下 `x` 这类还没成音节的键
+                // 就没有候选）。在这里清缓冲会把正打着的拼音抹掉，下一个字母就成了孤立字母原样上屏，
+                // 表现为「打 xin 打不出新」。
                 if self.focused == Some(session) {
-                    self.reset_composition();
+                    self.end_translation();
+                    self.cancel_prediction();
+                    self.hide_candidate_window();
                 }
                 None
             }

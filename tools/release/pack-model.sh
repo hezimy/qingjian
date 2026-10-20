@@ -41,5 +41,5 @@ cargo run --release -q -p qingjian-dict-convert -- --out-dir "$MODEL_DIR" pack m
   --output "$OUT" \
   --name "$name" --license "GPL-3.0-or-later" \
   --attribution "$attribution" \
-  --source "https://github.com/qingjian-team/qingjian" --data-version "$model_id-small"
+  --source "https://github.com/hezimy/qingjian" --data-version "$model_id-small"
 ls -la "$OUT"

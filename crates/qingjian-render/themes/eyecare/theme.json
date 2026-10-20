@@ -40,7 +40,7 @@
       ]
     },
 
-    // 悬浮状态条的一格：第一格中/英、文字格、齿轮格
+    // 悬浮状态条的一格：第一格中/英、文字格、设置格（一片树叶）
     "eyecare-status-cell": {
       "type": "frame", "padding": [4, 6, 4, 6],
       "children": [
@@ -52,8 +52,9 @@
           { "type": "text", "bind": "text", "when": "!gear", "font": "status",
             "color": { "if": "emphasized", "then": "#3A4B40", "else": "#3A4B40" } }
         ] },
-        { "type": "frame", "when": "gear", "children": [
-          { "type": "icon", "icon": "gear", "size": 13, "color": "#3A4B40" }
+        // 树叶比文字行矮，靠 align_self 在格子里居中；格子本身的高度由下面 repeat 的 stretch 拉齐到文字行高
+        { "type": "frame", "when": "gear", "align_self": "center", "children": [
+          { "type": "icon", "icon": "leaf", "size": 13, "color": "#3A4B40" }
         ] }
       ]
     }
@@ -114,7 +115,8 @@
       "children": [
         { "type": "frame", "position": "absolute", "inset": [-9, "auto", "auto", -9], "width": 26, "height": 26,
           "opacity": 0.5, "fill": { "image": "images/branch.svg" } },
-        { "type": "repeat", "bind": "cells", "component": "eyecare-status-cell" }
+        // 各格拉齐到行高：设置格没有文字行，不拉齐就只有图标高、顶端对齐，树叶会比文字高出一截
+        { "type": "repeat", "bind": "cells", "component": "eyecare-status-cell", "align_self": "stretch" }
       ]
     }
   }

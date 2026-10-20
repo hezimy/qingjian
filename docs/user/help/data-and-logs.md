@@ -77,7 +77,7 @@ description: 青简在本机保存的文件及其内容、云联想发送的内�
 ## 运行日志
 
 - **macOS**：「~/Library/Logs/Qingjian/」，输入法为「qingjian.log.日期」，设置窗口为「qingjian-settings.日期.log」。
-- **Windows**：「%LOCALAPPDATA%\Qingjian\logs」。引擎（「server.日期.log」）、各应用内的输入法部分（「tsf.日期.log」）与设置窗口（「qingjian-settings.日期.log」；旧版设置为「settings.日期.log」）都在这一个目录；
+- **Windows**：「%LOCALAPPDATA%\Qingjian\logs」。引擎（「server.日期.log」）、各应用内的输入法部分（「tsf.日期.log」）与设置窗口（「qingjian-settings.日期.log」）都在这一个目录；
   「设置 → 高级」的「打包到桌面」会把整个目录连同配置文件打成一个 zip，反馈时发这个文件即可。
 
 按天分文件，保留 7 天。缺省级别不记录输入内容；仅在「高级」页打开「详细日志」后才逐键记录，用于排查问题，排查完成后请关闭。

@@ -79,7 +79,7 @@ v1 只支持**全拼 + 辅码**、**双拼 + 辅码**。简拼 + 辅码、整句
 
 同一组设置项在两个平台的设置界面各出现一次，写进同一份 `config.toml`（配置文件是唯一事实源）：
 
-| 设置项 | macOS（偏好设置，AppKit） | Windows（设置程序，WinUI 3） |
+| 设置项 | macOS（偏好设置，AppKit） | Windows（设置程序，`apps/settings`） |
 |---|---|---|
 | 触发键 | 录制按钮，缺省 `;` | 录制控件，同一缺省 |
 | 候选上显示码 | 勾选框，缺省不勾 | 同左 |
@@ -112,7 +112,7 @@ v1 只支持**全拼 + 辅码**、**双拼 + 辅码**。简拼 + 辅码、整句
 | `qingjian-core` | 码段解析（触发键消歧、码段与拼音段分开记账）、码索引的两段式查询、过滤与重排、`MarkedKind` 新段；码表查询走 trait，不认识文件 |
 | `qingjian-dictionary` | 码表解析（`.dict.yaml` + `columns` / `import_tables` 规则）、独立码索引与落盘、导入统计 |
 | `qingjian-platform` | 配置项、码表与方案的目录与开关 |
-| 平台壳 | macOS：`apps/macos`（IMK 偏好设置页、候选窗自绘）；Windows：`apps/windows/settings`（WinUI 3 设置页）与 `apps/windows/server`（自绘候选窗与状态条）。两边都只做两件事：把码段画出来、把设置界面画出来 |
+| 平台壳 | macOS：`apps/macos`（IMK 偏好设置页、候选窗自绘）；Windows：`apps/settings`（三平台共用设置页）与 `apps/windows/server`（自绘候选窗与状态条）。两边都只做两件事：把码段画出来、把设置界面画出来 |
 
 平台层不出现排序逻辑、词库访问或翻译调用（`docs/design/architecture.md` 的架构约束）。
 
@@ -144,7 +144,7 @@ v1 只支持**全拼 + 辅码**、**双拼 + 辅码**。简拼 + 辅码、整句
 | 步 | 范围 | 验证方式 |
 |---|---|---|
 | 1 | **Core**：码表解析、独立码索引、码段与两段式查询（单独一个 PR，不碰壳） | `cargo test -p qingjian-core` / `-p qingjian-dictionary`、`apps/cli` 手测、`--replay` |
-| 2 | **Windows 壳**：Server / TSF 的 preedit 分段与候选绘制、`apps/windows/settings`（WinUI 3）的「辅码」页 | Windows 机器上 `cargo check --target x86_64-pc-windows-gnu` + 真机部署（Server + DLL + 设置程序） |
+| 2 | **Windows 壳**：Server / TSF 的 preedit 分段与候选绘制、`apps/settings`（三平台共用）的「输入」页辅码组 | Windows 机器上 `cargo check --target x86_64-pc-windows-gnu` + 真机部署（Server + DLL + 设置程序） |
 | 3 | **macOS 壳**：IMK 的 marked text 分段、候选窗绘制、偏好设置页 | macOS 机器上 `bundle.sh --install` + 真机输入验证 |
 
 第 1 步是后两步共同的前置；**第 2、3 步之间没有依赖**——先合哪一个都行，只有一个平台的贡献者只做自己那一步，另一平台由别的贡献者或维护者补。

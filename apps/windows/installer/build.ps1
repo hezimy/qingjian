@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    在 Windows 上打青简安装包：release 构建三个产物 + 用 Inno Setup 编 qingjian.iss。
+    在 Windows 上打青简安装包：release 构建产物 + 用 Inno Setup 编 qingjian.iss。
 .DESCRIPTION
     在编译机（MSVC 工具链 + Inno Setup）上跑。步骤：
       1) cargo build --release 出 DLL / Server / 设置程序，再单独编一份 32 位 DLL；
@@ -47,12 +47,12 @@ $rc = if ($kitsRoot) {
 }
 if ($rc) { $env:PATH = "$(Split-Path $rc);$env:PATH" } else { Write-Host '警告：没找到 Windows SDK 的 rc.exe，exe 图标会缺' -ForegroundColor Yellow }
 
-# 1) 构建产物：Server、DLL（64 / 32 位）、设置程序、旧版设置程序。
+# 1) 构建产物：Server、DLL（64 / 32 位）、设置程序。
 if (-not $SkipBuild) {
     Write-Host '构建 release 产物…' -ForegroundColor Cyan
     Push-Location $Repo
     try {
-        cargo build --release --locked -p qingjian-windows-server -p qingjian-windows-tsf -p qingjian-settings -p qingjian-windows-settings
+        cargo build --release --locked -p qingjian-windows-server -p qingjian-windows-tsf -p qingjian-settings
         if ($LASTEXITCODE -ne 0) { throw "cargo build 失败（退出码 $LASTEXITCODE）" }
         cargo build --release --locked -p qingjian-windows-tsf --target i686-pc-windows-msvc
         if ($LASTEXITCODE -ne 0) { throw "32 位 DLL cargo build 失败（退出码 $LASTEXITCODE）" }
@@ -64,8 +64,7 @@ $targets = @(
     'release\qingjian_tsf.dll',
     'i686-pc-windows-msvc\release\qingjian_tsf.dll',
     'release\qingjian-server.exe',
-    'release\qingjian-settings.exe',
-    'release\qingjian-settings-legacy.exe'
+    'release\qingjian-settings.exe'
 )
 foreach ($t in $targets) {
     $p = Join-Path $Repo "target\$t"
@@ -80,28 +79,6 @@ foreach ($t in 'release\qingjian-server.exe', 'release\qingjian-settings.exe') {
         throw "$t 里没有图标（rc.exe 缺失一类的嵌图标失败），先修好再打包"
     }
 }
-
-# 1.2) 自包含 Windows App Runtime：设置程序不再依赖机器上装的框架包（Windows 10 上框架依赖的引导用不了，
-#      见 apps\windows\settings\build.rs）。cargo 构建时 windows-reactor-setup 已按清单把运行时铺到
-#      target\release\，这里挑进暂存目录；target\release 里还有 deps\ 之类的中间产物，不能整个目录装。
-$runtimeStage = Join-Path $Repo 'target\installer\settings-runtime'
-$runtimeList  = Join-Path $PSScriptRoot 'settings-runtime.txt'
-# 清单是 UTF-8 且带中文注释：不指定编码时 PowerShell 5.1 按 GBK 读，注释末尾的字节会吞掉换行，紧跟其后的一项被当成注释漏掉。
-$wanted = Get-Content $runtimeList -Encoding UTF8 | Where-Object { $_ -and -not $_.StartsWith('#') } | ForEach-Object { $_.Trim() }
-if (Test-Path $runtimeStage) { Remove-Item $runtimeStage -Recurse -Force }
-New-Item -ItemType Directory -Path $runtimeStage -Force | Out-Null
-$missing = @()
-foreach ($name in $wanted) {
-    $src = Join-Path $Repo "target\release\$name"
-    if (Test-Path $src) {
-        Copy-Item $src -Destination (Join-Path $runtimeStage $name) -Recurse -Force
-    } else {
-        $missing += $name
-    }
-}
-# 缺文件说明自包含运行时没铺成功（build.rs 下载 NuGet 或解 MSIX 失败），早报错，别打出个跑不起来的包。
-if ($missing.Count -gt 0) { throw "自包含 Windows App Runtime 缺 $($missing.Count) 项：$($missing -join ', ')" }
-Write-Host "自包含运行时 $($wanted.Count) 项 → target\installer\settings-runtime" -ForegroundColor Cyan
 
 # 1.5) 签名（必须在 iscc 打包前：Inno 把已签的文件原样拷进安装包）。
 if ($Sign) {

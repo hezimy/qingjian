@@ -1,4 +1,4 @@
-//! 悬浮状态条（Windows）：几格并排的小条 `[中 / 英][，。/ ,.][⚙]`，每格文字居中、格间一条细线，圆角背景加阴影。
+//! 悬浮状态条（Windows）：几格并排的小条 `[中 / 英][，。/ ,.][叶]`，每格内容居中、格间一条细线，圆角背景加阴影。
 //! macOS 用菜单栏状态项，没有这一块。主题没写 `status.root` 时排法固定，尺寸与颜色取 `status` 分节；写了走节点树（`tree.rs`）。
 
 mod cell;
@@ -198,7 +198,7 @@ fn status_cell(
                 ..Style::default()
             };
             let visual = Visual::Icon {
-                icon: Icon::Gear.painter(),
+                icon: Icon::Leaf.painter(),
                 size,
                 color: m.theme.color(&spec.gear),
             };

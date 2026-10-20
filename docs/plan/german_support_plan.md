@@ -31,8 +31,8 @@
 | --- | --- |
 | `crates/qingjian-core/src/candidate/language.rs` | 加 `German` 变体；`code()` 加 `"de"`；`FromStr` 加 `"de" \| "german"`；测试新增 de，并把现有 `rejects_unknown_codes` 用例里的 `"de"` 换成 `"fr"` |
 | `crates/qingjian-predict/src/gloss/prompt.rs` | 新增 `GERMAN_SYSTEM_PROMPT`（汉德词典编纂者；名词必须带冠词 der/die/das、动词不定式、每条 ≤3 词）；`system_prompt` 加 German 臂；`clean_text` 加 German 分支：字符集复用西语拉丁扩展区间（含 ä ö ü ß），长度上限 `MAX_GERMAN_CHARS = 40`（复合词），词数 ≤4；补 parse_reply / clean_text 单测 |
-| `apps/windows/settings/src/panel/pages/general.rs` | `LANGUAGES` 加 `("德语", "de")`，数组长度 4→5 |
-| `apps/windows/settings/src/panel/pages/usage.rs` | `language_name` 加 `Language::German => "德语"` |
+| `apps/settings/src/view/parts/controls.rs` | `LANGUAGES` 加 `("德语", "de")`，数组长度 5→6 |
+| `apps/settings/src/stats/mod.rs` | `language_name` 加 `Language::German => "德语"` |
 | `apps/windows/server/src/assembly/mod.rs` | 仅 `load_vocabulary` 的 levels 循环数组（L174）加 German；释义表装载 code 驱动无需改。**`language_model.rs` 是 BigramModel 文件加载，与 Language 枚举无关，不要改** |
 | `apps/macos/src/preferences/controls.rs` | 加 `Language::German => "德语"` |
 | `apps/macos/src/host/mod.rs` | `GLOSSARY_LANGUAGES` `[Language; 3]` → 4，尾加 `Language::German` |

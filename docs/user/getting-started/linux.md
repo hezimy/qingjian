@@ -45,7 +45,7 @@ Fcitx4 的 Chrome 输入框可读取 X11 中当前应用的选中文字；部分
 sudo apt install python3 fcitx5 fcitx5-frontend-gtk3 fcitx5-frontend-gtk4 fcitx5-frontend-qt6 fcitx5-config-qt
 ```
 
-从[下载页](https://qingjian.app/download)下载 `qingjian-<版本>-linux-x86_64.tar.gz`，解压后在解出的目录里执行：
+从[下载页](https://github.com/hezimy/qingjian/releases/latest)下载 `qingjian-<版本>-linux-x86_64.tar.gz`，解压后在解出的目录里执行：
 
 ```sh
 ./install.sh
