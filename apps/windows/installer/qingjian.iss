@@ -15,6 +15,11 @@
 ; 安装 / 卸载期间持有互斥体 Global\QingjianInstaller，新 DLL 看到它就不拉；旧版 DLL 不认得它，
 ; 所以 Server exe 先改名腾位再杀、[Files] 里排最后装，新 exe 落地前 DLL 拉不起任何 Server。
 ;
+; 杀要杀全：`qingjian-server.exe` 之外，历次升级留下的 `qingjian-server.old-*.exe` 也算——
+; 它们跟新版同名进程一样占着命名管道与 mmap 着的数据文件（改过名的映像段仍然锁着文件），
+; 漏一个，新 Server 起不来 / 数据换不掉，用户看到的就是「装完没生效，非要重启」。
+; 杀完还要等映像真的释放（删得掉那个改名后的 exe 才算），等不到就记一行日志：那是要重启才换得掉。
+;
 ; 版本号由打包脚本用 /DAppVersion=... 传入，缺省 0.1.0。用法见本目录 README.md。
 
 #ifndef AppVersion
@@ -64,7 +69,7 @@ Name: "chs"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
 [Messages]
 ; 完成页：DLL 会装进每个应用进程，装之前就开着的应用要用新版必须重启（见文件头「升级」）。
 ; 这是最容易被误解成「设置/新版没生效」的一点，所以放在完成页明说。
-FinishedLabel=安装完成。请注销后重新登录（或重启电脑），青简才会在所有应用里生效。%n%n不方便注销的话，先关掉再重新打开要打字的应用也可以。
+FinishedLabel=安装完成，后台服务已按新版本重新启动。%n%n已经开着没关的应用（浏览器、WPS、编辑器等）里加载的还是旧版 DLL，要关掉再重新打开才会用上新版；嫌麻烦的话，注销后重新登录（或重启电脑）能一次把所有应用都换上。
 
 [Files]
 ; —— 二进制 ——
@@ -142,6 +147,8 @@ Filename: "{syswow64}\regsvr32.exe"; Parameters: "/u /s ""{app}\{#TsfDll32}"""; 
   Flags: runhidden; RunOnceId: "UnregDll32"
 
 [InstallDelete]
+; 更早版本装的旧版设置程序（新包已不带它），升级时顺手清掉
+Type: files; Name: "{app}\qingjian-settings-legacy.exe"
 ; 更早版本装在当前用户「启动」文件夹里的自启快捷方式：与机器级那份并存会起两个 Server（两条状态条）。
 Type: files; Name: "{userstartup}\Qingjian Server.lnk"
 ; 更早版本装的模型三件套（现在只带正式命名的 .qjm）：留着白占 56 MB。
@@ -180,15 +187,21 @@ begin
 end;
 
 { 运行中的 exe 不能覆盖但能改名：改成 qingjian-server.old-<随机>.exe 腾出名字，旧版 DLL 就拉不起它（见文件头）。
-  装完由 DeleteStaleFiles 删掉。 }
-procedure RetireServerExe;
+  装完由 DeleteStaleFiles 删掉；返回改名后的路径（没得改 / 改名失败返回空串）。 }
+function RetireServerExe: String;
 var
-  Path: String;
+  Path, Retired: String;
 begin
+  Result := '';
   Path := ExpandConstant('{app}\qingjian-server.exe');
   if FileExists(Path) then
-    if not RenameFile(Path, ExpandConstant('{app}\qingjian-server.old-') + IntToStr(Random(1000000)) + '.exe') then
+  begin
+    Retired := ExpandConstant('{app}\qingjian-server.old-') + IntToStr(Random(1000000)) + '.exe';
+    if RenameFile(Path, Retired) then
+      Result := Retired
+    else
       Log('改名旧 Server 失败: ' + Path);
+  end;
 end;
 
 procedure KillProcess(const Image: String);
@@ -197,6 +210,66 @@ var
 begin
   Exec(ExpandConstant('{sys}\taskkill.exe'), '/im ' + Image + ' /f', '',
     SW_HIDE, ewWaitUntilTerminated, ResultCode);
+end;
+
+{ 杀掉安装目录下所有叫 <Prefix>*.exe 的进程：当前名之外还算历次升级留下的
+  `qingjian-server.old-*.exe`。那些老进程跟同名进程一样占着命名管道和 mmap 着的数据文件，
+  漏一个，新 Server 起不来、数据也换不掉，用户看到的就是「装完没生效，非要重启」（见文件头）。 }
+procedure KillImagesInApp(const Prefix: String);
+var
+  Dir: String;
+  Found: TFindRec;
+begin
+  Dir := ExpandConstant('{app}');
+  if FindFirst(Dir + '\' + Prefix + '*.exe', Found) then
+  begin
+    try
+      repeat
+        KillProcess(Found.Name);
+      until not FindNext(Found);
+    finally
+      FindClose(Found);
+    end;
+  end;
+end;
+
+{ 等映像文件真的释放：进程还转着时它的映像段把文件锁着，删不掉。删掉了（或本来就没有）就是释放了。 }
+function WaitForImageRelease(const Path: String; Tries: Integer): Boolean;
+begin
+  Result := True;
+  while Tries > 0 do
+  begin
+    if not FileExists(Path) then
+      Exit;
+    if DeleteFile(Path) then
+      Exit;
+    Sleep(100);
+    Tries := Tries - 1;
+  end;
+  Result := False;
+end;
+
+{ 升级前把服务停干净：改名腾位 → 杀全（含 .old- 遗留）→ 等映像释放，等不到就重来一轮。
+  返回是否真的停干净；false 表示这次要重启才换得掉（已记一行日志，见文件头）。 }
+function StopServers: Boolean;
+var
+  Retired: String;
+  Round: Integer;
+begin
+  Retired := RetireServerExe;
+  Result := False;
+  for Round := 1 to 3 do
+  begin
+    KillImagesInApp('qingjian-server');
+    KillImagesInApp('qingjian-settings');
+    if (Retired = '') or WaitForImageRelease(Retired, 10) then
+    begin
+      Result := True;
+      Exit;
+    end;
+    Log('第 ' + IntToStr(Round) + ' 轮杀完 Server 后映像仍未释放，重试');
+  end;
+  Log('旧 Server 的映像一直没释放（提权 / 别的用户起的？），要重启才换得掉: ' + Retired);
 end;
 
 { 同版本重装（开发期反复装）：目标文件名与已加载的 DLL 撞名，覆盖不了但 Windows 允许改名，
@@ -215,12 +288,11 @@ begin
 end;
 
 { 覆盖前先结束 Server 与设置程序（只有这两个 exe 要覆盖；DLL 按版本并排装，不用关应用）。
-  没在跑时 taskkill 返回非 0，忽略。 }
+  没在跑时 taskkill 返回非 0，忽略；停不干净会在安装日志里留一行（见 StopServers）。 }
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 begin
-  RetireServerExe;
-  KillProcess('qingjian-server.exe');
-  KillProcess('qingjian-settings.exe');
+  if not StopServers then
+    Log('本次升级：旧 Server 没停干净，装完要重启才换得掉');
   RetireLoadedDll('{#TsfDll}');
   RetireLoadedDll('{#TsfDll32}');
   Result := '';
@@ -295,9 +367,17 @@ end;
 
 { 卸载同理：[UninstallRun] 杀 Server 之前先改名，旧版 DLL 拉不起它，文件才删得掉。 }
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  Retired: String;
 begin
   if CurUninstallStep = usUninstall then
-    RetireServerExe;
+  begin
+    Retired := RetireServerExe;
+    if Retired <> '' then
+      Log('卸载：旧 Server 已改名腾位 ' + Retired);
+    KillImagesInApp('qingjian-server');
+    KillImagesInApp('qingjian-settings');
+  end;
 end;
 
 { 装完在完成页点 Finish 后立即起一次 Server。
