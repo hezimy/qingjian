@@ -13,12 +13,14 @@
 ; 只有 Server 与设置程序这两个 exe 要覆盖，安装前自己 taskkill。
 ; Server 杀掉后，正在打字的应用里 DLL 连不上会自己把它拉起来（见 tsf 的 launch.rs），又占住 exe 和 mmap 着的数据：
 ; 安装 / 卸载期间持有互斥体 Global\QingjianInstaller，新 DLL 看到它就不拉；旧版 DLL 不认得它，
-; 所以 Server exe 先改名腾位再杀、[Files] 里排最后装，新 exe 落地前 DLL 拉不起任何 Server。
+; 所以 Server exe 改名腾位、[Files] 里排最后装，新 exe 落地前 DLL 拉不起任何 Server。
+; 顺序是「先按原名杀 → 再改名腾位」，不能反：改名之后进程报告的映像名仍是 qingjian-server.exe，
+; 拿新文件名字去 taskkill 匹配不到，Server 活着 → 它 mmap 着的 dict.qj 删不掉 → 安装中途报错误 5。
 ;
-; 杀要杀全：`qingjian-server.exe` 之外，历次升级留下的 `qingjian-server.old-*.exe` 也算——
-; 它们跟新版同名进程一样占着命名管道与 mmap 着的数据文件（改过名的映像段仍然锁着文件），
-; 漏一个，新 Server 起不来 / 数据换不掉，用户看到的就是「装完没生效，非要重启」。
-; 杀完还要等映像真的释放（删得掉那个改名后的 exe 才算），等不到就记一行日志：那是要重启才换得掉。
+; 杀要杀全：按原名杀之外，安装目录里其他 `qingjian-server*.exe` 也照样各发一遍 taskkill——
+; 万一有人直接双击过 `qingjian-server.old-*.exe`，那个进程的映像名才是 .old- 名，按原名杀不到它，
+; 它就是下一个「占着管道与数据文件、装完也不生效」的漏网之鱼。
+; 杀完还要确认映像真的释放（删得掉那个改名后的 exe 才算），等不到就重试，最后记一行日志：那是要重启才换得掉。
 ;
 ; 版本号由打包脚本用 /DAppVersion=... 传入，缺省 0.1.0。用法见本目录 README.md。
 
@@ -212,9 +214,9 @@ begin
     SW_HIDE, ewWaitUntilTerminated, ResultCode);
 end;
 
-{ 杀掉安装目录下所有叫 <Prefix>*.exe 的进程：当前名之外还算历次升级留下的
-  `qingjian-server.old-*.exe`。那些老进程跟同名进程一样占着命名管道和 mmap 着的数据文件，
-  漏一个，新 Server 起不来、数据也换不掉，用户看到的就是「装完没生效，非要重启」（见文件头）。 }
+{ 补充手段：按安装目录里现存的文件名逐个 taskkill，覆盖「有人直接双击了
+  qingjian-server.old-*.exe」这种映像名真就是 .old- 名的情形。**主力是按原名杀**（见 StopServers）：
+  进程报告的映像名是装载那一刻的文件名，改成 .old-*.exe 之后拿新文件名字去 taskkill 一个也匹配不到。 }
 procedure KillImagesInApp(const Prefix: String);
 var
   Dir: String;
@@ -249,17 +251,28 @@ begin
   Result := False;
 end;
 
-{ 升级前把服务停干净：改名腾位 → 杀全（含 .old- 遗留）→ 等映像释放，等不到就重来一轮。
-  返回是否真的停干净；false 表示这次要重启才换得掉（已记一行日志，见文件头）。 }
+{ 升级前把服务停干净：先按原名杀 → 再把 Server exe 改名腾位（防旧 DLL 拉起来）→ 等映像真释放，等不到重来一轮。
+  返回是否真的停干净；false 表示这次要重启才换得掉（已记一行日志，见文件头）。
+
+  **务必按原名杀**：磁盘上把 qingjian-server.exe 改名成 .old-*.exe 之后，进程报告的映像名
+  仍然是 qingjian-server.exe（Windows 记的是装载那一刻的文件名，实测改名后用新名字 taskkill 匹配不到、
+  用原名一击即中）。按磁盘文件名去杀，Server 就会活下来——它 mmap 着的 dict.qj 删不掉，
+  安装中途弹出「尝试替换已存在的文件时出错: DeleteFile 失败; 错误代码 5. 拒绝访问」。 }
 function StopServers: Boolean;
 var
   Retired: String;
   Round: Integer;
 begin
-  Retired := RetireServerExe;
   Result := False;
+  Retired := '';
   for Round := 1 to 3 do
   begin
+    KillProcess('qingjian-server.exe');
+    KillProcess('qingjian-settings.exe');
+    KillProcess('qingjian-settings-legacy.exe');
+    { 第一轮改名腾位；之后若 Server 又被拉起来（新文件已落地才有可能），再改一次 }
+    if (Retired = '') and FileExists(ExpandConstant('{app}\qingjian-server.exe')) then
+      Retired := RetireServerExe;
     KillImagesInApp('qingjian-server');
     KillImagesInApp('qingjian-settings');
     if (Retired = '') or WaitForImageRelease(Retired, 10) then
