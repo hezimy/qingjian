@@ -6,7 +6,8 @@
 //!
 //! WPS 文字（wps.exe）对组句范围**每个键**都报窗口右下角逐个像素（实测整个会话
 //! (2559,1399,2560,1399) 一动不动，候选窗因此死在屏幕右下角）。这种值在 [`stabilize`]
-//! 里一律不采用，退到次锚点——系统光标（[`system_caret_rect`]，跟着真光标走），再不行才是鼠标。
+//! 里一律不采用，退到次锚点——光标前一个字的真文本范围（[`preceding_rect`]）、系统光标
+//! （[`system_caret_rect`]，跟着真光标走），再不行才是鼠标。
 //!
 //! 但 `GetSelection` 量出来的**也是同一个角落残片**（实测整个会话
 //! `候选锚点 来源=起点 rect=(2559,1399,2560,1399)`，一条「改用」日志都没有）：WPS 只有
@@ -14,6 +15,12 @@
 //! 选区——[`caret_rect`] 原先信它，系统光标那条更可靠的路就永远轮不到，等于没有次锚点。
 //! 于是角落残片被当「上一次的正常位置」记进 `last_anchor`，之后每一键都退不出角落。所以
 //! 贴角的退化残片在 [`caret_rect`] 里一样不算数，且补整行前要先认出来（见 `repair_degenerate`）。
+//!
+//! 残片不再采信之后，次锚点一路退下去也到不了真光标：WPS 自绘光标、不 `CreateCaret`，
+//! `GetGUIThreadInfo` 取不到 `hwndCaret`（实测日志里一条「次选=系统光标」都没有），每次都落
+//! 到最后那条——鼠标。用户看到的就是候选窗贴着鼠标、离插入点横一段竖一段。所以再往前加一条
+//! 次选：量光标**前一个字**的真文本范围（[`preceding_rect`]）。空范围（光标点）在 WPS 的布局里
+//! 没有框，真文本才有；那个字的框右边缘正好是插入点，上下就是插入点所在那行。
 //!
 //! 判「贴角」不只靠前台窗口：WPS 里 DLL 看到的 `GetForegroundWindow` 未必是输入焦点那个
 //! 窗口，拿不到就整条判定失效、退化残片被原样采用（`stabilize` 的「改用」日志一条也没有，
@@ -71,26 +78,67 @@ fn collapsed_rect(context: &ITfContext, ec: u32, range: &ITfRange) -> Option<REC
 }
 
 /// 插入点（没有选区时是光标，有选区时是选区）的屏幕矩形。「只在候选窗口」模式应用里不放 marked text，
-/// 没有组句范围可量，就用它给候选窗口定位。
+/// 没有组句范围可量，就用它给候选窗口定位。依次试选区、光标前一个字、系统光标，都拿不到才是鼠标。
 ///
 /// 选区量出来的**退化残片贴在工作区右下角时不算数**：WPS 的 `GetSelection` 不空，量出来
 /// 和组句范围报的是同一个假光标（框架头注释里的实测），采信它 [`stabilize`] 退来退去还是
-/// 那个角落——等于没有次锚点。放它过去，继续退到系统光标（跟着真光标走）、再退鼠标。
+/// 那个角落——等于没有次锚点。放它过去，继续退到后面两条。
 pub(crate) fn caret_rect(context: &ITfContext, ec: u32) -> ScreenRect {
-    let selected = selection_range(context, ec).map(|range| anchor_rect(context, ec, &range));
-    if let Some(rect) = selected.filter(|rect| usable_caret(*rect)) {
+    let selected = selection_range(context, ec);
+    if let Some(rect) = selected
+        .as_ref()
+        .map(|range| anchor_rect(context, ec, range))
+        .filter(|rect| usable_caret(*rect))
+    {
         return rect;
     }
-    match system_caret_rect() {
-        Some(rect) => {
-            crate::com::log::log(&format!(
-                "候选锚点 次选=系统光标 rect=({},{},{},{})",
-                rect.left, rect.top, rect.right, rect.bottom
-            ));
-            rect
-        }
-        None => mouse_screen_rect(),
+    // 光标前一个字的真文本范围（WPS 空范围量不到布局，靠它拿到插入点）。残片一样不采用，
+    // 但也记一行——下一轮排查才知道这条路过没过、量到的矩形长什么样。
+    let preceding = selected
+        .as_ref()
+        .and_then(|range| preceding_rect(context, ec, range));
+    if let Some(rect) = preceding.filter(|rect| usable_caret(*rect)) {
+        return log_secondary(rect, "前一字");
     }
+    if let Some(rect) = preceding {
+        log_secondary(rect, "前一字（残片不采用）");
+    }
+    match system_caret_rect() {
+        Some(rect) => log_secondary(rect, "系统光标"),
+        None => log_secondary(mouse_screen_rect(), "鼠标"),
+    }
+}
+
+/// 把「次选」这副锚点的来源与矩形记一行：退到的是系统光标、前一字还是鼠标，WPS 那种量不到
+/// 光标的编辑器要有数据才能定。
+fn log_secondary(rect: ScreenRect, source: &str) -> ScreenRect {
+    crate::com::log::log(&format!(
+        "候选锚点 次选={source} rect=({},{},{},{})",
+        rect.left, rect.top, rect.right, rect.bottom
+    ));
+    rect
+}
+
+/// 光标**前一个字**的屏幕矩形：范围往左挪一个字再量，量到的是那个字的框。
+/// WPS 对空范围（插入点本身）不给布局框，真文本才有，所以这条路能到插入点——
+/// 字的框右边缘正好是插入点，上下就是插入点所在那行的行高（插入点在行首时量到上一行的末字，
+/// 会高一行，比贴到鼠标那边强）。挪不动（插入点在文档开头）返回 `None`。
+///
+/// 真跑要 TSF 上下文，判定那半条靠 [`usable_caret`] 的单测兜住。
+fn preceding_rect(context: &ITfContext, ec: u32, range: &ITfRange) -> Option<ScreenRect> {
+    let clone = unsafe { range.Clone() }.ok()?;
+    let mut moved = 0i32;
+    unsafe { clone.ShiftStart(ec, -1, &mut moved, std::ptr::null()) }.ok()?;
+    if moved == 0 {
+        return None;
+    }
+    let rect = range_rect(context, ec, &clone)?;
+    Some(to_screen(RECT {
+        left: rect.right,
+        top: rect.top,
+        right: rect.right,
+        bottom: rect.bottom,
+    }))
 }
 
 /// 选区量出来的锚点能不能当插入点用。WPS 的 `GetSelection` 量出来贴着工作区右下角，和组句
