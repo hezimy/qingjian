@@ -462,7 +462,7 @@ impl Router {
                     text: text.clone(),
                     kind: PreeditKind::Typed,
                 }],
-                preedit_mode: self.config.preedit,
+                preedit_mode: self.effective_preedit(),
                 cursor: *cursor,
                 candidates: CandidateList { items: Vec::new() },
                 highlight: usize::MAX,
@@ -522,7 +522,7 @@ impl Router {
                 self.annotate_sentence_translation(&mut candidates);
                 Frame {
                     preedit: preedit.clone(),
-                    preedit_mode: self.config.preedit,
+                    preedit_mode: self.effective_preedit(),
                     cursor: *cursor,
                     candidates,
                     highlight: highlight - first,

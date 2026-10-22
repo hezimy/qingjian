@@ -8,8 +8,10 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use qingjian_core::Engine;
 use qingjian_dictionary::Dictionary;
+use qingjian_platform::PreeditMode;
 use qingjian_platform::protocol::{
-    ClientMessage, Frame, KeyEvent, KeyModifiers, PROTOCOL_VERSION, ScreenRect, SessionId,
+    ClientMessage, Frame, KeyEvent, KeyModifiers, PROTOCOL_VERSION, ScreenRect, ServerMessage,
+    SessionId,
 };
 use qingjian_render::Mode;
 
@@ -133,5 +135,50 @@ fn a_dropped_connection_leaves_other_sessions_alone() {
     assert!(
         !router.engine.composition().is_empty(),
         "别的会话断了不该动这轮组句"
+    );
+}
+
+/// 指定宿主应用的 Router，拼音显示方式强制设成「只在候选窗口」（用户配置里的值）。
+fn window_only_router(sink: &Arc<RecordingSink>, app: &str) -> Router {
+    let engine = Engine::new(Dictionary::parse("你\tni\t100\n").unwrap());
+    let mut router = Router::new(engine, RouterConfig::default());
+    router.config.preedit = PreeditMode::Window;
+    router.set_candidate_sink(Box::new(sink.clone()));
+    router.handle(ClientMessage::OpenSession {
+        session: SessionId(1),
+        app: Some(app.to_owned()),
+        protocol: PROTOCOL_VERSION,
+    });
+    router
+}
+
+fn key_frame(router: &mut Router, character: char) -> Frame {
+    let response = router.handle(ClientMessage::Key {
+        session: SessionId(1),
+        event: KeyEvent::new(character as u32, Some(character), KeyModifiers::default()),
+    });
+    match response {
+        Some(ServerMessage::KeyResult { frame, .. }) => frame,
+        other => panic!("按键应有 KeyResult，实际 {other:?}"),
+    }
+}
+
+// WPS 实测（2026-10-22 日志 pid 23980）：窗口模式里整个会话的选区恒定报在组句起点那个字上
+// （(934,361,954,381) 一字不变），光标换行下移到页尾也不动，候选窗就钉死在起点。给它真实
+// 组句范围（行内拼音）它才逐键报对位置，所以 WPS 的「只在候选窗口」自动当「行内+候选窗」。
+#[test]
+fn wps_gets_inline_preedit_even_in_window_only_mode() {
+    let sink = Arc::new(RecordingSink::default());
+    let mut router = window_only_router(&sink, "wps.exe");
+    assert_eq!(key_frame(&mut router, 'n').preedit_mode, PreeditMode::Both);
+}
+
+#[test]
+fn other_apps_keep_the_window_only_setting() {
+    let sink = Arc::new(RecordingSink::default());
+    let mut router = window_only_router(&sink, "Code.exe");
+    assert_eq!(
+        key_frame(&mut router, 'n').preedit_mode,
+        PreeditMode::Window
     );
 }

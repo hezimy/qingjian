@@ -352,6 +352,9 @@ PKG_CONFIG_PATH="$onig" PKG_CONFIG_ALLOW_CROSS=1 RUSTONIG_SYSTEM_LIBONIG=1 \
 外加 `installer`（Inno Setup，同时装三平台共用的设置程序 `apps/settings` 的 `qingjian-settings.exe`）。
 悬浮状态条（`ui/status/`）按画出内容的矩形做命中测试：`WM_NCHITTEST` 落在内容外（投影留白、圆角外的透明像素）回 `HTTRANSPARENT` 穿到下面的应用，
 免得长按拖动的范围比看到的大一圈；摆放的夹取也不给投影留白，条子能贴到任务栏上边（`placement::hits` / `clamp_anchor`）。
+WPS 的「只在候选窗口」强制按「行内+候选窗」下发（`Router::effective_preedit`，认 `wps.exe` / `wpp.exe` / `et.exe`，不区分大小写）：
+WPS 的 TSF 里空范围（插入点）没有布局框，整个会话的选区都恒定报在组句起点那个字上（实测锚点 (934,361,954,381) 一字不变，光标换行下移到页尾也不动），
+候选窗会钉死在起点；给它真实组句范围（行内拼音）它才逐键报对位置。用户配置与设置页不改，只对这三个 exe 生效。
 Server 侧辅码接线：`RouterConfig.aux_code_key` / `aux_code_show`（`apply_config` 热加载）、`assembly` 从随包 `codes/` 与用户 `codes/` 装码表
 （`[aux_code] disabled` 过滤，`code_tables::load`）、按键在 `dispatch/key/input.rs` 分流（触发键进辅码态、辅码态里字母进码段、
 大写（`shift_letter = "compose"`）先清码段回拼音态再进缓冲区、标点先上屏高亮候选再转全角）、候选窗 `ui/candidates/row.rs` 的 `Row.code` 把码用方括号括起来紧跟在候选词后面（不进 annotation），拼音行 `view.rs` 给码段加下划线。

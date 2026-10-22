@@ -5,6 +5,7 @@ mod info;
 #[cfg(test)]
 mod tests;
 
+use qingjian_platform::PreeditMode;
 use qingjian_platform::protocol::SessionId;
 
 pub(super) use self::info::SessionInfo;
@@ -20,6 +21,26 @@ impl Router {
         self.focused
             .and_then(|session| self.sessions.get(&session))
             .and_then(|info| info.app.as_deref())
+    }
+
+    /// 这一轮实际用的拼音显示方式。
+    ///
+    /// 「只在候选窗口」对 WPS 不成立：WPS 的 TSF 里空范围（插入点）没有布局框，整个会话的选区
+    /// 都恒定报在组句起点那个字上（实测 (934,361,954,381) 一字不变，光标换行下移到页尾也不动），
+    /// 候选窗于是钉死在起点。给它真实组句范围（行内拼音）它才逐键报对位置，所以 WPS 的
+    /// `window` 一律当 `both` 用；其他应用照用户设置。
+    pub(super) fn effective_preedit(&self) -> PreeditMode {
+        let wps = self.focused_app().is_some_and(|app| {
+            matches!(
+                app.to_ascii_lowercase().as_str(),
+                "wps.exe" | "wpp.exe" | "et.exe"
+            )
+        });
+        if wps && self.config.preedit == PreeditMode::Window {
+            PreeditMode::Both
+        } else {
+            self.config.preedit
+        }
     }
 
     pub(super) fn ensure_focus(&mut self, session: SessionId) {
