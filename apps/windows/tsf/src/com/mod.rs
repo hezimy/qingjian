@@ -46,6 +46,9 @@ pub(crate) const CLSID_QINGJIAN_STR: &str = "{4FDCA82D-E923-49BF-9E75-BB906B93B8
 /// 语言 profile 的 GUID。
 pub(crate) const GUID_PROFILE: GUID = GUID::from_u128(0x8119f8e0_cf81_423b_9189_c0d7374324b3);
 
+/// [`GUID_PROFILE`] 的字符串形式（`InstallLayoutOrTip` 拼 tip 用），两者必须同步改。
+pub(crate) const GUID_PROFILE_STR: &str = "{8119F8E0-CF81-423B-9189-C0D7374324B3}";
+
 /// zh-CN。
 pub(crate) const LANGID_ZH_CN: u16 = 0x0804;
 

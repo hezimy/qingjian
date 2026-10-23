@@ -360,6 +360,10 @@ Server 侧辅码接线：`RouterConfig.aux_code_key` / `aux_code_show`（`apply_
 大写（`shift_letter = "compose"`）先清码段回拼音态再进缓冲区、标点先上屏高亮候选再转全角）、候选窗 `ui/candidates/row.rs` 的 `Row.code` 把码用方括号括起来紧跟在候选词后面（不进 annotation），拼音行 `view.rs` 给码段加下划线。
 热加载的 `dicts/` 与 `codes/` 目录与启动同款（修过一处传基础目录的错）。不合成一个 crate，因为 DLL 不能带 Engine 的依赖树，见 `apps/windows/README.md`；
 协议类型在 `qingjian-platform::protocol`，设计见 `docs/design/architecture.md`「Windows：TSF」。
+注册时除 `AddLanguageProfile` 外还要调 `input.dll!InstallLayoutOrTip`（`com/registry`，tip 为 `0x0804:{CLSID}{GUID}`，卸载用 `ILOT_UNINSTALL`）：
+前者只写 `HKLM\...\CTF\TIP` 的语言配置，用户的输入法列表（`HKCU\Control Panel\International\User Profile`）里没有它，
+而 Win10/11 设置的「键盘」与「默认输入法」下拉都按那份列表枚举——缺这步就表现为「装好了，但设置里找不到青简」。
+`input.dll` 没有导入库，走 `LoadLibraryW` + `GetProcAddress`；失败只记日志，仍可手动从「文本服务和输入语言」添加。
 
 Windows 的 `dispatch/mode` 管理可选的初始英文与按应用模式记忆（`[general] default_english` /
 `remember_mode_per_app`，缺省关闭）：exe 名不区分大小写，相同 exe 的会话共享；未知宿主按会话隔离。
