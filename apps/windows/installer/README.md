@@ -54,7 +54,8 @@ powershell -ExecutionPolicy Bypass -File apps\windows\installer\build.ps1
 
 脚本 release 构建产物、从 `apps\windows\server\Cargo.toml` 读版本、找 `ISCC.exe`、编 `qingjian.iss`，
 成品在 `target\installer\qingjian-<版本>-windows-x86_64-setup.exe`。改了数据 / 脚本但二进制没变时加 `-SkipBuild`；`-Sign` 用自签证书签产物
-（uiAccess 要求 Server 签名 + 装 Program Files）。
+（uiAccess 要求 Server 签名 + 装 Program Files），并把公钥证书一起打进包、安装时导入目标机的受信任根（卸载时撤掉），
+成品名多一个 `-selfsigned` 后缀。**这个包只自用**：它会让目标机信任一张自签根证书，GitHub 上的公开包不这么打。
 
 也可手动：`iscc /DAppVersion=0.1.0 apps\windows\installer\qingjian.iss`。
 
@@ -62,6 +63,7 @@ powershell -ExecutionPolicy Bypass -File apps\windows\installer\build.ps1
 
 - **Inno 版本**：开发机与 CI 统一用 Inno Setup **7.1.0**（CI 从 jrsoftware/issrc 的 GitHub Release 钉死下载）。它自带简体中文翻译；
   6.x 的安装包不带 `Languages\ChineseSimplified.isl`，Chocolatey 也只有 6.x，别用。`ArchitecturesAllowed=x64compatible` 需 6.3+。
-- **签名**：发版证书就绪后在这里加 `SignTool`（对应 mac 的 Developer ID）；开发期用 `-Sign` 的自签证书。
+- **签名**：发版证书就绪后在这里加 `SignTool`（对应 mac 的 Developer ID）；开发期 / 自用装 `-Sign` 的自签包
+  （`TrustDevCert` 定义控制是否随包装证书，公开包不带）。
 - **没证书的包**（CI 内测版）：先设 `$env:QINGJIAN_UIACCESS = '0'` 再打，Server 不嵌 uiAccess——没签名的 exe 带 uiAccess=true 会起不来。
   代价是候选窗在 UWP 宿主里可能被盖住。`release.yml` 的 `windows` job 就是这么打的。

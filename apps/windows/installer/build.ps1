@@ -13,9 +13,10 @@
 .PARAMETER SkipBuild
     跳过 cargo build（数据或 .iss 改了、二进制没变时重编安装包用）。
 .PARAMETER Sign
-    自签产物（sign-local.ps1）并开 uiAccess（候选窗才能盖过商店 / 任务栏搜索）。uiAccess=true 的 exe 要本机受信任的签名
-    才准启动，自签证书只有编译机信任——所以 -Sign 只用于本机真机测，对外分发的包不加此开关：不签名、关 uiAccess，
-    候选窗在那几个系统界面里会被盖住，但任何机器都能起。
+    自签产物（sign-local.ps1）并开 uiAccess（候选窗才能盖过商店 / 任务栏搜索）。uiAccess=true 的 exe 要签名证书
+    受信任才准启动，所以自签包会把证书一起打进安装包、安装时导入目标机的受信任根（卸载时撤掉）。成品名带
+    -selfsigned 后缀。仍然只适合自用：对外分发的包不加此开关——不签名、关 uiAccess，候选窗在那几个系统界面里
+    会被盖住，但任何机器都能起、也不用让用户信任一张自签根证书。
 #>
 [CmdletBinding()]
 param([switch]$SkipBuild, [switch]$Sign)
@@ -132,9 +133,18 @@ if (-not $iscc) {
 if (-not $iscc) { throw '找不到 ISCC.exe：装 Inno Setup 7 或用 QINGJIAN_ISCC 指定' }
 Write-Host "用 $iscc" -ForegroundColor Cyan
 
-# 4) 编安装包。
-& $iscc "/DAppVersion=$Version" "/DAppVersionNumeric=$VersionNumeric" $Iss
+# 4) 编安装包。自签包把证书一起打进去（安装时导入目标机的受信任根），成品名带 -selfsigned 以示区别。
+$defines = @("/DAppVersion=$Version", "/DAppVersionNumeric=$VersionNumeric")
+$suffix = ''
+if ($Sign) {
+    if (-not (Test-Path (Join-Path $Repo 'target\installer\qingjian-codesign.cer'))) {
+        throw '缺 target\installer\qingjian-codesign.cer：sign-local.ps1 没导出证书'
+    }
+    $defines += '/DTrustDevCert=1'
+    $suffix = '-selfsigned'
+}
+& $iscc @defines $Iss
 if ($LASTEXITCODE -ne 0) { throw "iscc 失败（退出码 $LASTEXITCODE）" }
 
-$out = Join-Path $Repo "target\installer\qingjian-$Version-windows-x86_64-setup.exe"
+$out = Join-Path $Repo "target\installer\qingjian-$Version-windows-x86_64-setup$suffix.exe"
 Write-Host "完成：$out" -ForegroundColor Green

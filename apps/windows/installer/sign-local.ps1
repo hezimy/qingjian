@@ -39,23 +39,33 @@ $thumbprint = $cert.Thumbprint
 Write-Host "证书指纹 $thumbprint" -ForegroundColor Cyan
 
 # 2) 把公钥装进「本机受信任的根」+「受信任的发布者」，uiAccess 的签名校验才认这张自签证书。
-#    已在就跳过（幂等）。
+#    已在就跳过（幂等）。公钥还导出到 target\installer，安装脚本编自签包时随包安装到目标机（见 build.ps1 -Sign）。
+$repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path
+$cerDir = Join-Path $repo 'target\installer'
+New-Item -ItemType Directory -Force -Path $cerDir | Out-Null
+$cer = Join-Path $cerDir 'qingjian-codesign.cer'
+Export-Certificate -Cert $cert -FilePath $cer -Type CERT | Out-Null
 foreach ($store in @('Root', 'TrustedPublisher')) {
     $storePath = "Cert:\LocalMachine\$store"
     $exists = Get-ChildItem $storePath -ErrorAction SilentlyContinue |
         Where-Object { $_.Thumbprint -eq $thumbprint }
     if (-not $exists) {
         Write-Host "装证书进 LocalMachine\$store…" -ForegroundColor Cyan
-        # 只导公钥（.cer），不带私钥。
-        $tmp = Join-Path $env:TEMP 'qingjian-dev-codesign.cer'
-        Export-Certificate -Cert $cert -FilePath $tmp -Type CERT | Out-Null
-        Import-Certificate -FilePath $tmp -CertStoreLocation $storePath | Out-Null
-        Remove-Item $tmp -Force -ErrorAction SilentlyContinue
+        # 编译机不必是管理员：签自签包时证书会随包装进目标机、安装时再导入；本机要跑也得装那个包。
+        try {
+            Import-Certificate -FilePath $cer -CertStoreLocation $storePath | Out-Null
+        } catch {
+            Write-Host "  跳过（需要管理员）：$($_.Exception.Message)" -ForegroundColor Yellow
+        }
     }
 }
 
-# 3) 找 signtool（Windows SDK 里，取版本最新的一个）。
-$signtool = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\bin\*\x64\signtool.exe' -ErrorAction SilentlyContinue |
+# 3) 找 signtool（Windows SDK 里，取版本最新的一个；SDK 不一定在 C 盘，按注册表的 KitsRoot10 也找一遍）。
+$kitsRoot = (Get-ItemProperty 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows Kits\Installed Roots' -ErrorAction SilentlyContinue).KitsRoot10
+$roots = @("${env:ProgramFiles(x86)}\Windows Kits\10", "${env:ProgramFiles}\Windows Kits\10")
+if ($kitsRoot) { $roots = @($kitsRoot) + $roots }
+$signtool = $roots |
+    ForEach-Object { Get-ChildItem (Join-Path $_ 'bin\*\x64\signtool.exe') -ErrorAction SilentlyContinue } |
     Sort-Object FullName -Descending | Select-Object -First 1
 if (-not $signtool) { throw '在 Windows SDK 里找不到 signtool.exe' }
 

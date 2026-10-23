@@ -39,6 +39,14 @@
 ; 按版本起名的 TSF DLL（见文件头「升级」）。
 #define TsfDll "qingjian_tsf-" + AppVersion + ".dll"
 #define TsfDll32 "qingjian_tsf-" + AppVersion + "-x86.dll"
+; 自签包（build.ps1 -Sign）：Server 带 uiAccess manifest，只有证书受信任 + 装在 Program Files 才起得来，
+; 所以证书必须随包安装。成品文件名带 -selfsigned，免得和对外发布的包混在一起。
+#ifdef TrustDevCert
+  #define OutputBaseFilename "qingjian-" + AppVersion + "-windows-x86_64-setup-selfsigned"
+  #define CertSubject "CN=Qingjian Dev CodeSign"
+#else
+  #define OutputBaseFilename "qingjian-" + AppVersion + "-windows-x86_64-setup"
+#endif
 
 [Setup]
 AppId={{A7E3C1F2-5B94-4D6A-9C0E-2F8B1D3A6E70}
@@ -58,7 +66,7 @@ PrivilegesRequired=admin
 ; 别让 Restart Manager 去关所有加载了 DLL 的应用（那是每一个有文本框的应用）。
 CloseApplications=no
 OutputDir={#Repo}\target\installer
-OutputBaseFilename=qingjian-{#AppVersion}-windows-x86_64-setup
+OutputBaseFilename={#OutputBaseFilename}
 SetupIconFile={#Repo}\apps\windows\tsf\resources\qingjian.ico
 UninstallDisplayIcon={app}\qingjian.ico
 Compression=lzma2
@@ -110,6 +118,10 @@ Source: "{#Repo}\assets\wubi\wubi86.tsv";        DestDir: "{app}\assets\wubi";  
 Source: "{#Repo}\assets\sample\dict.tsv";        DestDir: "{app}\assets\sample"; Flags: ignoreversion
 ; —— Server 放最后：它一落地，旧版 DLL 就能把它拉起来并占住数据文件（见文件头）——
 Source: "{#Repo}\target\release\qingjian-server.exe";   DestDir: "{app}"; Flags: ignoreversion
+; 自签代码签名证书（只含公钥；build.ps1 -Sign 让 sign-local.ps1 导出到这里）。
+#ifdef TrustDevCert
+Source: "{#Repo}\target\installer\qingjian-codesign.cer"; DestDir: "{app}"; Flags: ignoreversion
+#endif
 
 [Icons]
 Name: "{group}\青简设置"; Filename: "{app}\qingjian-settings.exe"; IconFilename: "{app}\qingjian.ico"
@@ -125,6 +137,14 @@ Name: "{commonstartup}\青简 Server"; Filename: "{app}\qingjian-server.exe"; Wo
 ; ① UWP/AppContainer 应用要能读安装目录才能加载 DLL（*S-1-15-2-1 = ALL APPLICATION PACKAGES，按 SID 与语言无关）。
 Filename: "{sys}\icacls.exe"; Parameters: """{app}"" /grant *S-1-15-2-1:(OI)(CI)RX /T /C /Q"; \
   Flags: runhidden waituntilterminated; StatusMsg: "配置应用容器权限…"
+#ifdef TrustDevCert
+; ①.5 信任自签证书：uiAccess 的 exe 只有签名证书受信任才起得来（否则报「从服务器返回了一个参照」，Server 直接起不来）。
+;     只对 -Sign 打的自签包生效；对外发布的包里没有这条，也没有证书文件。
+Filename: "{sys}\certutil.exe"; Parameters: "-addstore -f Root ""{app}\qingjian-codesign.cer"""; \
+  Flags: runhidden waituntilterminated; StatusMsg: "信任自签证书…"
+Filename: "{sys}\certutil.exe"; Parameters: "-addstore -f TrustedPublisher ""{app}\qingjian-codesign.cer"""; \
+  Flags: runhidden waituntilterminated
+#endif
 ; ② 注册文本服务（写 HKCR + 图标到 %ProgramData%\Qingjian\qingjian.ico）。注册的是本版本的 DLL，
 ;    InprocServer32 指向新文件；旧版本的 DLL **不能** regsvr32 /u（那会把整个 CLSID 注销掉）。
 Filename: "{sys}\regsvr32.exe"; Parameters: "/s ""{app}\{#TsfDll}"""; \
@@ -147,6 +167,13 @@ Filename: "{sys}\regsvr32.exe"; Parameters: "/u /s ""{app}\{#TsfDll}"""; \
   Flags: runhidden; RunOnceId: "UnregDll"
 Filename: "{syswow64}\regsvr32.exe"; Parameters: "/u /s ""{app}\{#TsfDll32}"""; \
   Flags: runhidden; RunOnceId: "UnregDll32"
+#ifdef TrustDevCert
+; 撤掉自签包导入的根证书（按主题删，只删这张自签证书；装别的版本没人再签同一主题）。
+Filename: "{sys}\certutil.exe"; Parameters: "-delstore Root ""{#CertSubject}"""; \
+  Flags: runhidden; RunOnceId: "DelDevCertRoot"
+Filename: "{sys}\certutil.exe"; Parameters: "-delstore TrustedPublisher ""{#CertSubject}"""; \
+  Flags: runhidden; RunOnceId: "DelDevCertPublisher"
+#endif
 
 [InstallDelete]
 ; 更早版本装的旧版设置程序（新包已不带它），升级时顺手清掉
@@ -163,6 +190,9 @@ Type: filesandordirs; Name: "{app}\codes"
 [UninstallDelete]
 ; 历次升级留下的旧版本 DLL（正常在升级时就删了；仍被占用的会留到这里）。
 Type: files; Name: "{app}\qingjian_tsf-*.dll"
+#ifdef TrustDevCert
+Type: files; Name: "{app}\qingjian-codesign.cer"
+#endif
 Type: files; Name: "{app}\qingjian-server.old-*.exe"
 
 [Code]
