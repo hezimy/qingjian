@@ -378,6 +378,71 @@ fn raw_committed_english_words_are_learned_and_come_back_as_candidates() {
     );
 }
 
+#[test]
+fn pinyin_with_a_trailing_initial_is_not_an_english_word() {
+    // 「拼音 + 末尾落单简拼」的残串（`henqig`、`gonggqc`、`zhengc`）是中文词没打完就原样上屏留下的
+    struct Personal(WordList);
+    impl Learner for Personal {
+        fn record(&mut self, _candidate: &Candidate) {}
+        fn weight(&self, _text: &str) -> u32 {
+            0
+        }
+        fn user_english(&self) -> Option<&WordList> {
+            Some(&self.0)
+        }
+    }
+    let personal =
+        WordList::parse("henqig\thenqig\t2\nkaifaz\tkaifaz\t2\nabd\tabd\t2\nrust\trust\t3\n")
+            .unwrap();
+    let dict = "开发\tkai fa\t9000\n开发者\tkai fa zhe\t3000\n";
+    let mut engine =
+        Engine::new(Dictionary::parse(dict).unwrap()).with_learner(Box::new(Personal(personal)));
+
+    // 词库里整词逐音节对上全部输入（`开发者` 的 zhe 按 z 命中）时，个人表里那条残串不出英文候选
+    engine.set_input("kaifaz");
+    let items = engine.query().unwrap().candidates.items;
+    assert_eq!(items[0].text, "开发者");
+    assert!(items.iter().all(|c| c.text != "kaifaz"));
+    // 原样上屏也不学成英文词（见 `looks_like_english_word`）：重查还是不出
+    assert_eq!(engine.take_raw(), "kaifaz");
+    engine.set_input("kaifaz");
+    let items = engine.query().unwrap().candidates.items;
+    assert!(items.iter().all(|c| c.text != "kaifaz"));
+
+    // 同一张表里的 henqig 一律不出：词库没有对应中文词也一样
+    engine.set_input("henqig");
+    assert!(
+        engine
+            .query()
+            .unwrap()
+            .candidates
+            .items
+            .iter()
+            .all(|c| c.text != "henqig")
+    );
+    // 拼音部分太短（`ab d`）的可能是真的缩写，照旧给；正常英文词不受影响
+    engine.set_input("abd");
+    assert!(
+        engine
+            .query()
+            .unwrap()
+            .candidates
+            .items
+            .iter()
+            .any(|c| c.kind == CandidateKind::English && c.text == "abd")
+    );
+    engine.set_input("rust");
+    assert!(
+        engine
+            .query()
+            .unwrap()
+            .candidates
+            .items
+            .iter()
+            .any(|c| c.kind == CandidateKind::English && c.text == "rust")
+    );
+}
+
 /// 句末的英文词：`kaifarust` → 开发rust 排第一，拼音行是 `kai'fa'rust`，上屏吃掉整段并把 rust 记进个人英文词表。
 #[test]
 fn english_word_at_the_end_of_pinyin_joins_the_sentence() {

@@ -90,7 +90,10 @@ CandidateLayout 保持 `set_cloud` 的首页末尾布局与本地首项；`set_c
   更短的查询（`yiy`）不带走更长输入（`yiyi`）下的选择，隔串压不到别人；英文词位置的仲裁同样只按字面键）、用户词（`user-words.tsv`，主词库同格式，
   Engine 与主词库一起查）、个人英文词（`user-english.tsv`，回车原样上屏的英文词与选过的英文候选，与随包英文词表一起出候选且在前；
   原样上屏的串要像一个词才学：`MIN_ENGLISH_WORD_LETTERS` = 2 到 `MAX_ENGLISH_WORD_LETTERS` = 15 个字母、切不成完整拼音、
-  也不能读成「拼音头 + 英文尾」——打不出来时整串上屏的失败拼音学进去会反过来堵住混输那条路，越打不出来学得越多）、
+  也不能读成「拼音头 + 英文尾」——打不出来时整串上屏的失败拼音学进去会反过来堵住混输那条路，越打不出来学得越多；
+  也不能是「完整拼音 + 末尾一串落单声母」（`henqig`、`zhengc`、`gonggqc`，`engine::reads_as_pinyin_with_initial_tail`），
+  那是中文词没打完就回车留下的残串。表里已有的这类残串查询时也不出候选（`personal_english_noise`），
+  前提是随包词表里没有这个词——`went`、`jib` 这种真是英文词的照旧给；`navicat` 中间的音节读不全，不判）、
   个人敲错表（`user-typos.tsv`，接受过的 (敲的, 要的) 音节对，词图敲错边与整段纠错的代价按它打折）与个人 n-gram（`user-ngram.tsv`，Core `sentence::UserNgram`，
   二元 + 三元在线计数，整句转换与词级排序里与静态模型插值；Tab 接受的云端整句按 `sentence::segment_text` 切词后也记；
   连着选出的两个词记够次数自动造词进用户词，一段拼音分几次选完的合成词记两次也造）。
@@ -181,6 +184,9 @@ P2C 自由生成实验：`--eval-text <集> --eval-generate data/models/hanzhang
 （`womaileyigeiphone` 的 `phone` 被当成敲错的 `paone`）。拼音干净的输入一条都不触发，常态零成本；
 异步打分器下走同一次 `request_rescoring`（`Job.generate`），按键回调不等它。
 `GENERATE_BEAM` = 5、`GENERATE_MAX_CHARS` = 32、`GENERATED_CANDIDATES` = 2、`MIN_GENERATED_LETTERS` = 6；双拼 / 注音不走（按键不是模型见过的字母）。
+末尾落单声母且词级已有整词逐音节对上全部输入（`henqig` → 很奇怪、`zhengc` → 正常、`qingkx` → 情况下）时不生成，
+整句与生成的都让位给那个词：模型在那里只会把末尾声母猜丢、生成 很清 / 蒸菜 这种半句，插到词前面把正常词组挤下去。
+判断是 `converting::word_covers_all`，`plain_sentence` 与生成共用（原 #619 的落单声母判断）。
 生成的候选没有音节对齐，上屏吃掉整段作用域、不记学习。漏的是「英文词本身就是合法拼音」那种（`zhegeapihenhaoyong` 的 `api` 读成 `a pi`），
 光看切分分不出来。
 

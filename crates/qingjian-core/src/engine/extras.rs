@@ -105,7 +105,14 @@ impl Engine {
             aux_code: None,
             alt_translation: None,
         };
-        let word = lists.iter().find_map(|words| words.get(text));
+        // 个人表里学进去的「拼音 + 末尾落单简拼」（`henqig`、`gonggqc`、`zhengc`）不给候选：
+        // 那是中文词没打完就原样上屏留下的残串，出在候选里会把同一段字母的正常中文词挤下去。
+        // 只挡个人表；随包表里真有这个英文词照旧给（`personal_english_noise` 里已排除）。
+        let word = if self.personal_english_noise(text) {
+            None
+        } else {
+            lists.iter().find_map(|words| words.get(text))
+        };
         // 这段字母下用户选中文词（`key` → 可以）比选英文词的次数多：中文词留在第一，英文让到后面；
         // 拼音再不像话也是他自己教的
         // 仲裁只看字面键：`wenti` 下选的 问题 不能隔着 `went` 把英文词顶下去，
@@ -139,9 +146,11 @@ impl Engine {
             let mut budget = ENGLISH_COMPLETIONS;
             for words in &lists {
                 for word in words.complete(text, budget) {
-                    if items
-                        .iter()
-                        .any(|c| c.kind == CandidateKind::English && c.text == word)
+                    // 个人表里补全出来的也是同一类残串（`gong` → gonggqc），一并挡掉
+                    if self.personal_english_noise(word)
+                        || items
+                            .iter()
+                            .any(|c| c.kind == CandidateKind::English && c.text == word)
                     {
                         continue;
                     }
@@ -162,10 +171,24 @@ impl Engine {
         let scope = self.composition.scope();
         self.english_in_chinese
             && !scope.is_empty()
+            && !self.personal_english_noise(scope)
             && self
                 .english_lists()
                 .iter()
                 .any(|words| words.get(scope).is_some())
+    }
+
+    /// 个人英文表里这条是「拼音 + 末尾落单简拼」的残串（见 [`super::reads_as_pinyin_with_initial_tail`]），
+    /// 且随包词表里没有这个词：随包表里真有（`went`、`jib`）的照旧给。
+    fn personal_english_noise(&self, text: &str) -> bool {
+        self.learner
+            .user_english()
+            .is_some_and(|words| words.get(text).is_some())
+            && self
+                .english
+                .as_ref()
+                .is_none_or(|words| words.get(text).is_none())
+            && super::reads_as_pinyin_with_initial_tail(text)
     }
 
     pub(super) fn english_lists(&self) -> Vec<&WordList> {

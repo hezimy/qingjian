@@ -283,6 +283,51 @@ fn trailing_initial_sentence_yields_to_a_word_covering_the_whole_input() {
     assert_eq!(items[0].kind, CandidateKind::Sentence);
 }
 
+/// 假生成器：不管按键，一律生成同一个文本（模拟 P2C 模型把末尾声母猜丢的半句）。
+struct Generates(&'static str);
+
+impl crate::sentence::SentenceScorer for Generates {
+    fn score(&self, _context: &str, _keys: &str, _texts: &[&str]) -> Vec<f64> {
+        Vec::new()
+    }
+
+    fn generate(&self, _keys: &str, _beam: usize, _max_chars: usize) -> Vec<String> {
+        vec![self.0.to_owned()]
+    }
+}
+
+#[test]
+fn generated_sentence_yields_to_a_word_covering_a_trailing_initial() {
+    // 模型把末尾的 g 猜丢、生成「很清」：词库整词「很奇怪」逐音节对上 hen'qi'g，生成的那条不该插到它前面
+    let dict = "很\then\t900000\n奇\tqi\t900000\n怪\tguai\t900000\n清\tqing\t9000\n\
+                很奇怪\then qi guai\t500\n";
+    let engine = Engine::new(Dictionary::parse(dict).unwrap()).with_sentence_scorer(
+        Box::new(Generates("很清")),
+        None,
+        None,
+        None,
+    );
+    let mut engine = engine;
+    engine.set_input("henqig");
+    let items = engine.query().unwrap().candidates.items;
+    assert_eq!(items[0].text, "很奇怪");
+    assert!(items.iter().all(|c| c.kind != CandidateKind::Generated));
+
+    // 对照：没有整词覆盖全部输入时照常生成并排在前面
+    let dict = "很\then\t900000\n奇\tqi\t900000\n怪\tguai\t900000\n清\tqing\t9000\n";
+    let engine = Engine::new(Dictionary::parse(dict).unwrap()).with_sentence_scorer(
+        Box::new(Generates("很清")),
+        None,
+        None,
+        None,
+    );
+    let mut engine = engine;
+    engine.set_input("henqig");
+    let items = engine.query().unwrap().candidates.items;
+    assert_eq!(items[0].text, "很清");
+    assert_eq!(items[0].kind, CandidateKind::Generated);
+}
+
 #[test]
 fn shortcuts_follow_the_first_local_candidate() {
     let all = texts("rq");

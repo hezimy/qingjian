@@ -521,7 +521,35 @@ fn looks_like_english_word(raw: &str, english_mode: bool) -> bool {
     }
     english_mode
         || (raw.len() <= MAX_ENGLISH_WORD_LETTERS
-            && !parser::is_fully_segmentable(&raw.to_ascii_lowercase()))
+            && !parser::is_fully_segmentable(&raw.to_ascii_lowercase())
+            && !reads_as_pinyin_with_initial_tail(&raw.to_ascii_lowercase()))
+}
+
+/// 「拼音 + 末尾落单简拼」的残串（`henqig` → hen qi g、`gonggqc` → gong g q c、`zhengc` → zheng c）：
+/// 那是中文词打不完就原样上屏留下的，不是英文词。前面每个音节都得是完整的、
+/// 整串拼音部分至少三个字母才算（`abud` 这类短的可能是真的缩写）；
+/// 中间夹着残缺音节的不算（`navicat` 的 `vi` 读不成音节，是英文词）。
+fn reads_as_pinyin_with_initial_tail(raw: &str) -> bool {
+    let Some(segmentation) = parser::segment(raw)
+        .ok()
+        .and_then(|all| all.into_iter().next())
+    else {
+        return false;
+    };
+    let syllables = &segmentation.syllables;
+    let Some(head) = syllables.iter().rposition(|s| s.complete) else {
+        return false;
+    };
+    head + 1 < syllables.len()
+        && syllables[..=head].iter().all(|s| s.complete)
+        && syllables[..=head]
+            .iter()
+            .map(|s| s.text.len())
+            .sum::<usize>()
+            >= 3
+        && syllables[head + 1..]
+            .iter()
+            .all(|s| !s.complete && s.text.len() == 1)
 }
 
 /// 模式的记忆化键：完整音节原样，前缀音节后加 `*`。

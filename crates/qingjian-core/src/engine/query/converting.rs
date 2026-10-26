@@ -43,16 +43,21 @@ impl Engine {
                 // 词图读不通整段时模型直接生成的整句排在词图那几条前面：这时词图给的是把英文段
                 // 硬读成拼音的结果（`yongdockerbushuhenfangbian` → 用的哦乘客仍不熟很方便），排它前面没有可惜的
                 // `typos` 为假就是拼写纠错已经生效（见调用处），那时 `best` 是纠正后的切分
-                let generated: Vec<Candidate> = self
-                    .generated_sentence_candidates(best, keys, !typos)
-                    .into_iter()
-                    .filter(|g| {
-                        !items
-                            .iter()
-                            .chain(sentences.iter())
-                            .any(|c| c.text == g.text)
-                    })
-                    .collect();
+                // 词级已有整词逐音节对上全部输入时不生成（与 `plain_sentence` 的落单声母判断同源）：
+                // `henqig` 生成的是 很清 这种把末尾声母猜丢的半句，会把 很奇怪 挤到第二
+                let generated: Vec<Candidate> = if word_covers_all(items, best) {
+                    Vec::new()
+                } else {
+                    self.generated_sentence_candidates(best, keys, !typos)
+                        .into_iter()
+                        .filter(|g| {
+                            !items
+                                .iter()
+                                .chain(sentences.iter())
+                                .any(|c| c.text == g.text)
+                        })
+                        .collect()
+                };
                 let generated_count = generated.len();
                 for (offset, candidate) in generated.into_iter().enumerate() {
                     items.insert((position + offset).min(items.len()), candidate);
@@ -87,20 +92,8 @@ impl Engine {
         // 末尾只敲了一个声母（viterbi 放行的落单声母，见 #619）时，词级已有一个整词逐音节对上
         // 全部输入（`houxuank` → 候选框、`zaiw` → 在外），整句把同一个声母猜成另一句话
         // （后悬空、在我）就不该插到那个词前面：与「整段本就是词库词时不出整句」同一道理。
-        let trailing_single_initial =
-            best.last_is_partial() && best.syllables.last().is_some_and(|s| s.text.len() == 1);
-        if trailing_single_initial {
-            let patterns = best.patterns();
-            if items.iter().any(|c| {
-                c.kind == CandidateKind::Chinese
-                    && c.syllables.len() == patterns.len()
-                    && c.syllables
-                        .iter()
-                        .zip(&patterns)
-                        .all(|(syllable, pattern)| pattern.accepts(syllable))
-            }) {
-                return Vec::new();
-            }
+        if word_covers_all(items, best) {
+            return Vec::new();
         }
         let wanted = if alternates && best.syllables.len() >= ALTERNATE_MIN_SYLLABLES {
             SENTENCE_CANDIDATES
@@ -243,4 +236,22 @@ impl Engine {
         }
         paths
     }
+}
+
+/// 末尾只敲了一个声母、且词级里已有一个整词逐音节对上全部输入（`henqig` → 很奇怪、`zhengc` → 正常）：
+/// 这时末位那个声母就是在给那个词收尾，整句与模型生成的整句都不该插到它前面
+/// （生成的会是 很清 / 蒸菜 这种把声母猜丢的半句）。没有整词覆盖全部输入时照旧让位给整句。
+fn word_covers_all(items: &[Candidate], best: &Segmentation) -> bool {
+    if !(best.last_is_partial() && best.syllables.last().is_some_and(|s| s.text.len() == 1)) {
+        return false;
+    }
+    let patterns = best.patterns();
+    items.iter().any(|c| {
+        c.kind == CandidateKind::Chinese
+            && c.syllables.len() == patterns.len()
+            && c.syllables
+                .iter()
+                .zip(&patterns)
+                .all(|(syllable, pattern)| pattern.accepts(syllable))
+    })
 }
