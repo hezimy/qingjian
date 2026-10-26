@@ -35,7 +35,7 @@ use file::{ColorRef, FontRef, LockedAppearance, SCHEMA, ThemeFile};
 type EmbeddedFiles = &'static [(&'static str, &'static [u8])];
 
 /// 内置主题：id、源文件与图片，按设置界面列出的顺序；第一个是缺省主题。
-const BUILTINS: [(&str, &str, EmbeddedFiles); 8] = [
+const BUILTINS: [(&str, &str, EmbeddedFiles); 9] = [
     (
         "qingjian",
         include_str!("../../themes/qingjian/theme.json"),
@@ -108,6 +108,20 @@ const BUILTINS: [(&str, &str, EmbeddedFiles); 8] = [
     (
         "eyecare",
         include_str!("../../themes/eyecare/theme.json"),
+        &[
+            (
+                "images/branch.svg",
+                include_bytes!("../../themes/eyecare/images/branch.svg"),
+            ),
+            (
+                "images/meadow.svg",
+                include_bytes!("../../themes/eyecare/images/meadow.svg"),
+            ),
+        ],
+    ),
+    (
+        "eyecare-dark",
+        include_str!("../../themes/eyecare-dark/theme.json"),
         &[
             (
                 "images/branch.svg",
@@ -879,6 +893,51 @@ mod tests {
         assert_ne!(
             base.color(&base.file().status.normal),
             Color::rgb(0x3a, 0x4b, 0x40)
+        );
+    }
+
+    /// 护眼绿·夜只做深色：外形照抄护眼绿，颜色换成墨绿底 + 几档浅绿字，浅色下也按深色画。
+    #[test]
+    fn eyecare_dark_stays_dark_and_keeps_the_light_greens() {
+        // 明明要浅色，仍给深色那套（`appearance` 锁 dark）
+        let theme = Theme::builtin("eyecare-dark", false).expect("内置护眼绿·夜");
+        assert_eq!(theme.id(), "eyecare-dark");
+        assert_eq!(theme.surface_color(), Color::rgb(0x15, 0x22, 0x19));
+        assert_eq!(
+            theme.color(&ColorRef::Variable("accent".to_owned())),
+            Color::rgb(0x2c, 0x44, 0x36)
+        );
+        // 字按层次变浅：候选词最亮、译文其次、序号最暗，都明显亮于底色
+        let level = |name: &str| theme.color(&ColorRef::Variable(name.to_owned()));
+        let (text, gloss, faint) = (level("text"), level("gloss"), level("faint"));
+        let luminance = |color: Color| {
+            0.299 * f32::from(color.r) + 0.587 * f32::from(color.g) + 0.114 * f32::from(color.b)
+        };
+        assert!(luminance(text) > luminance(gloss));
+        assert!(luminance(gloss) > luminance(faint));
+        assert!(luminance(faint) > luminance(theme.surface_color()));
+        // 状态条节点树的底色也跟着换（护眼绿写死浅灰绿，这里必须盖掉）
+        let root = theme.file().status.root.as_ref().expect("仍然走节点树");
+        let crate::theme::file::node::NodeKind::Frame { fill, .. } = &root.kind else {
+            panic!("状态条根节点是框");
+        };
+        let crate::theme::file::node::FillSpec::Color(fill) = fill.as_ref().expect("状态条有底色")
+        else {
+            panic!("状态条底色是纯色");
+        };
+        let crate::theme::file::ColorSpec::Fixed(fill) = fill else {
+            panic!("状态条底色没有条件");
+        };
+        assert_eq!(theme.color(fill), Color::rgb(0x15, 0x22, 0x19));
+        assert!(root.layout.effects.as_deref().unwrap_or(&[]).is_empty());
+        // 字号与窗口结构继承护眼绿，不另写一套
+        assert_eq!(theme.theme_size("preedit"), Some(18.0));
+        assert_eq!(
+            theme.font("candidate").size,
+            Theme::builtin("eyecare", false)
+                .unwrap()
+                .font("candidate")
+                .size
         );
     }
 

@@ -6,7 +6,7 @@
 ## 主题文件
 
 - 一个主题一个目录：`theme.json`，加上它引用的 `images/…`（PNG、SVG）与 `fonts/…`（TTF / OTF / TTC）。包内路径一律相对 `theme.json`，拒绝 `..` 与绝对路径。
-- 内置主题八个，随 crate 编进来（`crates/qingjian-render/themes/<id>/theme.json`）：`qingjian` 青简绿（缺省）、`eyecare` 护眼绿、`system-blue` 系统蓝、`wechat` 微信绿、`sakura` 樱花、`dafeiyu` 大肥鱼、`miku` 初音未来、`bocchi` 波奇酱；系统蓝、微信绿 `extends` 青简绿、只改颜色变量与字号，樱花、大肥鱼、初音未来、波奇酱整套重写了窗口、组件与状态条（只有浅色）。护眼绿也在青简绿上再加东西：候选窗左上角与右下角两处绝对定位的图片底纹、拼音行的 `preedit` 样式（默认 18 点），状态条改走节点树（`status.root`，见「状态条」）好放左上那枝枝叶底纹；它的 `status.effects` 写空、不画投影，所以状态条位图就等于可见的那一条，长按拖动的范围与看到的一致（没有投影后位图不多出边距，长按拖动的范围能贴着任务栏边上停住）。
+- 内置主题九个，随 crate 编进来（`crates/qingjian-render/themes/<id>/theme.json`）：`qingjian` 青简绿（缺省）、`eyecare` 护眼绿、`eyecare-dark` 护眼绿·夜、`system-blue` 系统蓝、`wechat` 微信绿、`sakura` 樱花、`dafeiyu` 大肥鱼、`miku` 初音未来、`bocchi` 波奇酱；系统蓝、微信绿 `extends` 青简绿、只改颜色变量与字号，樱花、大肥鱼、初音未来、波奇酱整套重写了窗口、组件与状态条（只有浅色）。护眼绿也在青简绿上再加东西：候选窗左上角与右下角两处绝对定位的图片底纹、拼音行的 `preedit` 样式（默认 18 点），状态条改走节点树（`status.root`，见「状态条」）好放左上那枝枝叶底纹；它的 `status.effects` 写空、不画投影，所以状态条位图就等于可见的那一条，长按拖动的范围与看到的一致（没有投影后位图不多出边距，长按拖动的范围能贴着任务栏边上停住）。护眼绿·夜 `extends` 护眼绿，只把颜色变量写死成墨绿底 + 几档浅绿的单一值、重写状态条那一格与两处底纹的不透明度，`meta.appearance` 锁 `dark`（没有浅色版本），图片沿用护眼绿那两张。
   内置主题的图片用 `include_bytes!` 编进程序（`theme/mod.rs` 的 `BUILTINS` 里每个主题一张「路径 → 内容」表，与用户主题走同一套解码），不带字体文件、只用系统字体；测试检查内置主题用到的图片都编进去了。用户主题 `extends` 内置主题时，主题目录里没有的图片到那个内置主题编进程序的文件里找（只看顶层 `extends` 那一层）。
 - 用户主题放在 `<用户数据目录>/themes/<id>/`，由 `ThemeLibrary` 与内置主题合成一个列表（内置在前、用户按 id 排）。目录名必须等于 `meta.id`，不能与内置主题重名，
   不能是 `system` / `light` / `dark`；读不进来的跳过并记警告。设置界面（mac 偏好设置、Windows 设置程序「候选窗口」页）按显示名列出，写回 `[general] theme` 的 id。

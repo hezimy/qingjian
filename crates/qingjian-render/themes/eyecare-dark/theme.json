@@ -1,0 +1,106 @@
+// 护眼绿·夜：护眼绿的反向版。墨绿近黑的窗口底、深一档的选中高亮，文字与状态条用深浅几档的护眼绿；
+// 枝叶与草地底纹、字号、窗口结构都继承护眼绿（底纹的绿在墨绿上压到 0.4，免得比字还抢眼）。
+// 只做深色：`appearance` 锁 dark，系统切浅色时也不换（这套配色本身没有浅色版本）。
+{
+  "extends": "eyecare",
+  "schema": 1,
+  "meta": {
+    "id": "eyecare-dark",
+    "name": "护眼绿·夜",
+    "author": "青简",
+    "license": "GPL-3.0-or-later",
+    "appearance": "dark"
+  },
+
+  // 一个值给两种外观共用：锁了 dark，浅色那一档不会被取到。
+  // 层次：surface 最暗 → accent 高亮块 → faint 序号/页码 → gloss 译文/拼音 → text 候选词最亮。
+  "variables": {
+    "surface": "#152219",
+    "accent": "#2C4436",
+    "text": "#E4EFE5",
+    "gloss": "#BACFBE",
+    "faint": "#8AA795",
+    "fresh": "#EBC583",
+    "cloud": "#6FD9C0",
+    "hl_text": "#E4EFE5",
+    "hl_gloss": "#BACFBE",
+    "hl_faint": "#8AA795",
+    "hl_fresh": "#EBC583",
+    "hl_cloud": "#6FD9C0"
+  },
+
+  "components": {
+    // 状态条的一格：护眼绿那格写死了浅色底色下的深绿字，这里换成分档的浅绿；结构照旧。
+    "eyecare-status-cell": {
+      "type": "frame", "padding": [4, 6, 4, 6],
+      "children": [
+        { "type": "frame", "when": "first", "children": [
+          { "type": "text", "text": "中", "when": "!mode.english", "font": "status", "color": "#C9DBCB" },
+          { "type": "text", "text": "英", "when": "mode.english", "font": "status", "color": "#C9DBCB" }
+        ] },
+        { "type": "frame", "when": "!first", "children": [
+          { "type": "text", "bind": "text", "when": "!gear", "font": "status",
+            "color": { "if": "emphasized", "then": "#E4EFE5", "else": "#C9DBCB" } }
+        ] },
+        { "type": "frame", "when": "gear", "align_self": "center", "children": [
+          { "type": "icon", "icon": "leaf", "size": 13, "color": "#C9DBCB" }
+        ] }
+      ]
+    }
+  },
+
+  "windows": {
+    // children 整组继承护眼绿，只把两处底纹的不透明度压低：浅灰绿底上 0.5 是淡纹，墨绿底上会跳出来。
+    "horizontal": {
+      "children": [
+        { "type": "frame", "position": "absolute", "inset": [-12, "auto", "auto", -12], "width": 40, "height": 40,
+          "opacity": 0.4, "fill": { "image": "images/branch.svg" } },
+        { "type": "frame", "position": "absolute", "inset": ["auto", -10, -10, "auto"], "width": 56, "height": 34,
+          "opacity": 0.4, "fill": { "image": "images/meadow.svg" } },
+        { "type": "use", "component": "top_line" },
+        { "type": "frame", "when": "candidates", "align_self": "stretch", "padding": [0, 5, 0, 5], "gap": 8,
+          "children": [
+            { "type": "repeat", "bind": "candidates", "component": "item" },
+            { "type": "frame", "when": "page", "margin": [0, -5, 0, "auto"], "padding": [0, 0, 0, 5], "children": [
+              { "type": "text", "bind": "page", "font": "index", "color": "@faint", "margin": [8, 0, 0, 0] }
+            ] }
+          ] },
+        { "type": "annotation", "bind": "highlighted.annotation", "when": "highlighted.annotation",
+          "font": "annotation", "gloss": "@gloss", "fresh": "@fresh", "faint": "@faint",
+          "margin": [2, -5, 0, 5], "padding": [0, 0, 2, 0] }
+      ]
+    },
+    "vertical": {
+      "children": [
+        { "type": "frame", "position": "absolute", "inset": [-12, "auto", "auto", -12], "width": 40, "height": 40,
+          "opacity": 0.4, "fill": { "image": "images/branch.svg" } },
+        { "type": "frame", "position": "absolute", "inset": ["auto", -10, -10, "auto"], "width": 56, "height": 34,
+          "opacity": 0.4, "fill": { "image": "images/meadow.svg" } },
+        { "type": "use", "component": "top_line" },
+        { "type": "frame", "when": "candidates", "table": { "row_height": 27 }, "align_self": "stretch",
+          "children": [{ "type": "repeat", "bind": "candidates", "component": "row" }] },
+        { "type": "text", "bind": "page", "font": "index", "color": "@faint",
+          "align_self": "end", "margin": [4, 0, 0, 0] }
+      ]
+    }
+  },
+
+  // 状态条底色是写死的十六进制（护眼绿的节点树不读 background 字段），这里跟变量同值；
+  // 固定排法那几个字段留着改值，用户主题与文档仍按它们取提示色。
+  // root 的 children 也要整组重写：底纹那枝枝叶在护眼绿里是 0.5，墨绿底上会亮过文字。
+  "status": {
+    "background": "#152219",
+    "normal": "#C9DBCB",
+    "emphasized": "#E4EFE5",
+    "gear": "#C9DBCB",
+    "separator": "#2C4436",
+    "root": {
+      "fill": "#152219",
+      "children": [
+        { "type": "frame", "position": "absolute", "inset": [-9, "auto", "auto", -9], "width": 26, "height": 26,
+          "opacity": 0.35, "fill": { "image": "images/branch.svg" } },
+        { "type": "repeat", "bind": "cells", "component": "eyecare-status-cell", "align_self": "stretch" }
+      ]
+    }
+  }
+}
