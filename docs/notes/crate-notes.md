@@ -180,6 +180,10 @@ P2C 自由生成实验：`--eval-text <集> --eval-generate data/models/hanzhang
 **模型直接生成的整句**（`engine/query/generating.rs`，候选类型 `CandidateKind::Generated`）：词图只会把整段按键读成拼音，
 中英混输（`yongdockerbushuhenfangbian`）与生词在它那里根本没有路径，出来的只能是把英文段硬读成拼音的废话（用的哦乘客仍不熟很方便）。
 词图读不通整段时改问 `SentenceScorer::generate`（P2C 走 `P2c::convert`，字级模型返回空），生成的整句插在词图那几条前面。
+词图已把整段按键完整读成句子（`best.letters() == keys.len()`）、且没有拼写纠错时，生成的**纯汉字**整句只是另一种断句，
+词库与二元模型在这一类上更可靠（`xiaomox` 生成的 消磨性、`womendoushihaohaiz` 生成的 我们都是豪孩子 会把 小模型 / 好孩子 挤到第二），
+排到词图那几条后面；生成里带拉丁字母（`用Docker部署很方便`）说明输入有一截是词图读不出的英文，仍排前面
+（`converting::insert_sentence` 里的 `full_reading`）。
 「读不通」三条：最优切分里有不完整音节、切分没覆盖到末尾（`woyongvscodexiedaima` 的 `v` 起不了音节）、拼写纠错生效
 （`womaileyigeiphone` 的 `phone` 被当成敲错的 `paone`）。拼音干净的输入一条都不触发，常态零成本；
 异步打分器下走同一次 `request_rescoring`（`Job.generate`），按键回调不等它。

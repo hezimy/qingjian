@@ -313,7 +313,7 @@ fn generated_sentence_yields_to_a_word_covering_a_trailing_initial() {
     assert_eq!(items[0].text, "很奇怪");
     assert!(items.iter().all(|c| c.kind != CandidateKind::Generated));
 
-    // 对照：没有整词覆盖全部输入时照常生成并排在前面
+    // 对照：没有整词覆盖时模型照常生成，但词图已把整段读成句子（很/奇/怪），生成的半句排在它后面
     let dict = "很\then\t900000\n奇\tqi\t900000\n怪\tguai\t900000\n清\tqing\t9000\n";
     let engine = Engine::new(Dictionary::parse(dict).unwrap()).with_sentence_scorer(
         Box::new(Generates("很清")),
@@ -324,7 +324,47 @@ fn generated_sentence_yields_to_a_word_covering_a_trailing_initial() {
     let mut engine = engine;
     engine.set_input("henqig");
     let items = engine.query().unwrap().candidates.items;
-    assert_eq!(items[0].text, "很清");
+    assert_eq!(items[0].text, "很奇怪");
+    assert_eq!(items[0].kind, CandidateKind::Sentence);
+    assert_eq!(items[1].text, "很清");
+    assert_eq!(items[1].kind, CandidateKind::Generated);
+}
+
+#[test]
+fn generated_han_sentence_yields_to_a_word_graph_reading_the_whole_input() {
+    // 模型生成的纯汉字整句只是另一种断句，词库与二元模型更可靠：小模型 / 好孩子 不该被挤到第二
+    let dict = "小\txiao\t500000\n模\tmo\t900000\n型\txing\t900000\n\
+                消\txiao\t9000\n磨\tmo\t9000\n性\txing\t9000\n";
+    let engine = Engine::new(Dictionary::parse(dict).unwrap()).with_sentence_scorer(
+        Box::new(Generates("消磨性")),
+        None,
+        None,
+        None,
+    );
+    let mut engine = engine;
+    engine.set_input("xiaomox");
+    let items = engine.query().unwrap().candidates.items;
+    assert_eq!(items[0].text, "小模型");
+    assert_eq!(items[0].kind, CandidateKind::Sentence);
+    let generated = items
+        .iter()
+        .position(|c| c.kind == CandidateKind::Generated)
+        .unwrap();
+    assert_eq!(items[generated].text, "消磨性");
+    assert!(generated > 0);
+
+    // 生成里带拉丁字母（输入有一段是词图读不出的英文）：仍排在词图整句前面
+    let dict = "我\two\t900000\n用\tyong\t900000\n阿\ta\t900000\n婆\tpo\t900000\n";
+    let engine = Engine::new(Dictionary::parse(dict).unwrap()).with_sentence_scorer(
+        Box::new(Generates("我用api")),
+        None,
+        None,
+        None,
+    );
+    let mut engine = engine;
+    engine.set_input("woyongap");
+    let items = engine.query().unwrap().candidates.items;
+    assert_eq!(items[0].text, "我用api");
     assert_eq!(items[0].kind, CandidateKind::Generated);
 }
 

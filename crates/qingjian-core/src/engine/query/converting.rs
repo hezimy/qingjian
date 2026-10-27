@@ -58,14 +58,31 @@ impl Engine {
                         })
                         .collect()
                 };
-                let generated_count = generated.len();
-                for (offset, candidate) in generated.into_iter().enumerate() {
+                // 词图把整段按键完整读成了句子、也没有拼写纠错时，模型生成的纯汉字整句只是另一种断句：
+                // 词库与二元模型在这一类上更可靠（`xiaomox` 生成的 消磨性、`womendoushihaohaiz` 生成的
+                // 我们都是豪孩子 会把 小模型 / 好孩子 挤到第二），排到词图那几条后面；
+                // 生成里带拉丁字母（`这个api很好用`、`用docker不输很方便`）说明输入里有一截是词图读不出的英文，
+                // 那才是生成要兜的情况，仍排前面。
+                let full_reading = typos && best.letters() == keys.len() && !sentences.is_empty();
+                let (leading, trailing): (Vec<Candidate>, Vec<Candidate>) = if full_reading {
+                    generated
+                        .into_iter()
+                        .partition(|c| c.text.chars().any(|ch| ch.is_ascii_alphabetic()))
+                } else {
+                    (generated, Vec::new())
+                };
+                let leading_count = leading.len();
+                let sentence_count = sentences.len();
+                for (offset, candidate) in leading.into_iter().enumerate() {
                     items.insert((position + offset).min(items.len()), candidate);
                 }
                 for (offset, plain) in sentences.into_iter().enumerate() {
+                    items.insert((position + leading_count + offset).min(items.len()), plain);
+                }
+                for (offset, candidate) in trailing.into_iter().enumerate() {
                     items.insert(
-                        (position + generated_count + offset).min(items.len()),
-                        plain,
+                        (position + leading_count + sentence_count + offset).min(items.len()),
+                        candidate,
                     );
                 }
             }
