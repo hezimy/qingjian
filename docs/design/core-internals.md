@@ -66,7 +66,8 @@ Engine::query()      engine/query/mod.rs，最热的一条路
       ├─ decode                双拼 / 注音先解成全拼（Decoded），之后与全拼同路
       ├─ split_english_tail    末尾是英文词（…xuehaorust）：与整段读成拼音比分（mixed_beats_plain），赢了才拆开
       ├─ parser::segment       trie 切音节；全拼 / 简拼混排 / 末尾残缺音节；整段切不动就取最长可切前缀；
-      │                        同音节数时不带生僻音节（fiao / biang）的切法在前：biangeng 是 bian geng
+      │                        同音节数时不带生僻音节（fiao / biang / eng）的切法在前：biangeng 是 bian geng、
+      │                        keneng 是 ke neng（eng 只有 鞥）
       ├─ active_correction     拼音「不像话」（unlikely_pinyin）才试一处编辑的变体；按噪声信道，
       │                        纠后得分扣掉编辑代价仍高于原样才纠；结果按 scope 记进 correction_cache
       │

@@ -40,7 +40,8 @@ pub const SYLLABLES: &[&str] = &[
 ];
 
 /// 只有一两个生僻字的音节。双拼里与常用音节同键时让给常用的（小狼 `bm` 是 ben 不是 biang）。
-pub const RARE_SYLLABLES: &[&str] = &["fiao", "biang"];
+/// `eng` 只有 鞥（词频 0），`keneng` 要切 ke|neng（可能）而不是 ken|eng（肯鞥）。
+pub const RARE_SYLLABLES: &[&str] = &["fiao", "biang", "eng"];
 
 /// 音节最长 6 个字母（zhuang / chuang / shuang）。
 pub const MAX_SYLLABLE_LEN: usize = 6;

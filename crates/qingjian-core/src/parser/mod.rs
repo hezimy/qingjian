@@ -196,6 +196,9 @@ mod tests {
         assert!(joined("biangeng").contains(&"biang eng".to_owned()));
         assert_eq!(joined("biang")[0], "biang");
         assert_eq!(joined("fiao")[0], "fiao");
+        // eng 只有 鞥：keneng 是 ke neng，不是 ken eng
+        assert_eq!(joined("keneng")[0], "ke neng");
+        assert!(joined("keneng").contains(&"ken eng".to_owned()));
     }
 
     #[test]
