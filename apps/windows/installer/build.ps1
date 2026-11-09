@@ -37,7 +37,11 @@ if ($Sign) {
 
 # 图标靠 rc.exe 编（apps\windows\*\build.rs 的 embed_icon）：winresource 找不到它时只警告、图标就没嵌进去，
 # 在资源管理器 / 任务栏里显示白框。本机 SDK 装在 F 盘（注册表 KitsRoot10 指向 F:\Windows Kits\10\），
-# 照它把 x64 目录补进 PATH；vcvars 那套在这里用不了（cmd /c 被禁）。
+# 照它找 x64 的 rc.exe；vcvars 那套在这里用不了（cmd /c 被禁）。
+#
+# 找到就写进 RC_PATH：winresource **不查 PATH**，它先看 RC_PATH，没有再自己查注册表——而查注册表用的是
+# reg.exe，被安全软件拦掉时整步直接失败（图标静默缺失，最后是 build.ps1 的图标检查报错）。SDK 不在时退到
+# 本地存的一份（%LOCALAPPDATA%\Qingjian\tools\rc\x64，取自 NuGet 的 Microsoft.Windows.SDK.BuildTools）。
 $kitsRoot = (Get-ItemProperty 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows Kits\Installed Roots' -ErrorAction SilentlyContinue).KitsRoot10
 $rc = if ($kitsRoot) {
     Get-ChildItem (Join-Path $kitsRoot 'bin') -Directory -ErrorAction SilentlyContinue |
@@ -46,7 +50,17 @@ $rc = if ($kitsRoot) {
         Where-Object { Test-Path $_ } |
         Select-Object -First 1
 }
-if ($rc) { $env:PATH = "$(Split-Path $rc);$env:PATH" } else { Write-Host '警告：没找到 Windows SDK 的 rc.exe，exe 图标会缺' -ForegroundColor Yellow }
+if (-not $rc) {
+    $localRc = Join-Path $env:LOCALAPPDATA 'Qingjian\tools\rc\x64\rc.exe'
+    if (Test-Path $localRc) { $rc = $localRc }
+}
+if ($rc) {
+    $env:RC_PATH = $rc
+    $env:PATH = "$(Split-Path $rc);$env:PATH"
+    Write-Host "用 rc.exe：$rc" -ForegroundColor Cyan
+} else {
+    Write-Host '警告：没找到 Windows SDK 的 rc.exe，exe 图标会缺' -ForegroundColor Yellow
+}
 
 # 1) 构建产物：Server、DLL（64 / 32 位）、设置程序。
 if (-not $SkipBuild) {
